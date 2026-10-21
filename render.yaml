@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: flowsense-talq-gateway
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: FLOWSENSE_API_KEY
+        generateValue: true
+      - key: TALQ_CLIENT_ADDRESS
+        sync: false
+      - key: DEMO_MODE
+        value: "true"

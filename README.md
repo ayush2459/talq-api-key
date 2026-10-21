@@ -1,325 +1,148 @@
 # FlowSense TALQ Gateway
 
-**An IoT interoperability gateway for integrating FlowSense water and energy monitoring systems with TALQ-compatible smart-city management platforms.**
+**A FastAPI-based pilot gateway with approval-based client API key issuance.**
 
-FlowSense TALQ Gateway is a FastAPI-based pilot project designed to explore how FlowSense device and meter data can be exposed through a standardized gateway interface for integration with external Central Management Software (CMS).
+FlowSense TALQ Gateway explores a secure access workflow for connecting authorized client systems to a future FlowSense/TALQ integration. A client submits an access request; an administrator reviews and approves it; the service then generates a unique API key bound to that client's approved address. Each issued key can be revoked independently.
 
-The project establishes an initial API foundation for device discovery, service discovery, data-package access, and secure API access. Its long-term objective is to bridge FlowSense's IoT monitoring infrastructure with interoperable smart-city platforms using the [TALQ Consortium's specifications](https://github.com/TALQ-consortium/TALQ_specification).
+> **Status:** Pilot scaffold, not a complete or TALQ-certified implementation. Device and data-package collections are placeholders. Live FlowSense integration, complete TALQ schema validation, and production security controls remain future work.
 
-> **Project status:** Prototype / pilot scaffold. This repository is not a complete, validated, or TALQ-certified implementation. Device data and data packages are currently placeholders. Full schema validation, real FlowSense integration, and security hardening are required before production use.
+## Access lifecycle
 
----
+1. **Request access:** Client submits contact name, work email, organization, intended use, and client address to `POST /access-requests`.
+2. **Review request:** An administrator lists pending requests through `GET /admin/access-requests`.
+3. **Approve:** An administrator calls `POST /admin/access-requests/{request_id}/approve` using the `X-Admin-Key` header. The service creates a unique client API key and returns the raw key **once**.
+4. **Use API:** Client sends its issued key using `X-API-Key`, plus `talq-api-version: 2.7.1` and its approved `clientAddress` on gateway requests.
+5. **Revoke:** An administrator can revoke a key using `POST /admin/api-keys/{key_id}/revoke`. Revoked keys are rejected immediately.
 
-## Table of Contents
+Only a SHA-256 hash of each issued API key is stored in the database. The raw key is not retrievable later, so the client must save it securely when issued. The admin credential is separate from client API keys and must never be shared with clients.
 
-- [Overview](#overview)
-- [Objectives](#objectives)
-- [Architecture](#architecture)
-- [Technology Stack](#technology-stack)
-- [API Endpoints](#api-endpoints)
-- [Authentication and Security](#authentication-and-security)
-- [Getting Started](#getting-started)
-- [Running Tests](#running-tests)
-- [Deployment on Render](#deployment-on-render)
-- [Current Limitations](#current-limitations)
-- [Development Roadmap](#development-roadmap)
-- [References](#references)
+## API endpoints
 
-## Overview
+### Public
+- `GET /health` — health probe.
+- `POST /access-requests` — submit an access request; this does not issue a key.
 
-FlowSense is an IoT-based monitoring concept for tracking energy and water consumption, identifying anomalies, and generating actionable operational insights.
+### Admin-only (requires `X-Admin-Key`)
+- `GET /admin/access-requests?status=pending` — list requests. Supported statuses: `pending`, `approved`, `rejected`, `all`.
+- `POST /admin/access-requests/{request_id}/approve` — approve and issue one client API key.
+- `POST /admin/access-requests/{request_id}/reject` — reject a pending request.
+- `GET /admin/api-keys` — list key metadata, never raw keys.
+- `POST /admin/api-keys/{key_id}/revoke` — revoke an issued key.
 
-The TALQ Gateway pilot explores an interoperability layer between FlowSense and external management platforms. Rather than requiring every client to integrate directly with FlowSense's internal data services, a gateway can provide a defined interface through which authorized clients discover devices, inspect available services, and retrieve relevant data.
+### Protected gateway pilot routes (requires `X-API-Key`)
+- `GET /integration-status`
+- `GET /devices`
+- `GET /devices/count`
+- `GET /devices/{deviceAddress}`
+- `GET /services`
+- `GET /services/{serviceName}`
+- `GET /data-packages`
 
-### Key capabilities
+Gateway routes also require the `talq-api-version: 2.7.1` header and `clientAddress` query parameter. The requested client address must match the one associated with the issued key. These are pilot routes and response payloads, not proof of complete TALQ 2.7.1 conformance.
 
-- **Device discovery:** Initial endpoints for listing devices, counting devices, and retrieving a device by address.
-- **Service discovery:** Exposes a list of available gateway services.
-- **Data-package access:** Provides an initial endpoint for exposing data packages.
-- **API access control:** Protects gateway endpoints using an API key.
-- **Protocol version identification:** Checks the requested TALQ API version for protected gateway requests.
-- **Client identification:** Requires a `clientAddress` query parameter and supports an optional configured client-address restriction.
-- **Health monitoring:** Provides a public health endpoint for deployment monitoring.
-- **Cloud deployment foundation:** Includes Docker and Render configuration.
+## Local setup (Windows PowerShell)
 
-## Objectives
-
-1. Establish an API foundation for FlowSense-to-CMS interoperability.
-2. Explore the relevant TALQ Gateway API patterns and request conventions.
-3. Create a modular service that can later connect to actual FlowSense meter and sensor data.
-4. Introduce basic authentication and configuration management.
-5. Enable repeatable local development, automated testing, and cloud deployment.
-6. Build toward schema-validated integration with a compatible Central Management Software platform.
-
-## Architecture
-
-The intended integration architecture is:
-
-```text
-FlowSense IoT Devices and Meters
-              |
-              v
-   FlowSense Data Services
-   (Sensors, Meter Readings,
-    Database and Processing)
-              |
-              v
-     FlowSense TALQ Gateway
-        (FastAPI Service)
-              |
-       API Authentication
-       and Request Validation
-              |
-              v
-   TALQ-Compatible CMS Client
-```
-
-**Current implementation:** The FastAPI application exposes a limited set of gateway-style routes. The device and data-package collections are empty placeholders, and the application does not yet connect to real FlowSense sensors, MQTT, or a production database.
-
-**Target implementation:** Integrate live FlowSense data, map it to the applicable TALQ data model, validate requests and responses against the official specification, and test interoperability with the intended CMS.
-
-## Technology Stack
-
-| Component | Technology |
-|---|---|
-| Backend framework | FastAPI |
-| Programming language | Python 3.11 |
-| API server | Uvicorn |
-| API documentation | OpenAPI / Swagger UI |
-| API access control | Shared API key |
-| Containerization | Docker |
-| Deployment configuration | Render Blueprint |
-| Automated testing | pytest and FastAPI TestClient |
-| Interoperability reference | TALQ Consortium specifications |
-
-## API Endpoints
-
-The current pilot exposes the following routes.
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/health` | Health check |
-| `GET` | `/integration-status` | View pilot integration status |
-| `GET` | `/devices` | List configured devices |
-| `GET` | `/devices/count` | Count configured devices |
-| `GET` | `/devices/{deviceAddress}` | Retrieve a device by address |
-| `GET` | `/services` | List available services |
-| `GET` | `/services/{serviceName}` | Retrieve a service entry |
-| `GET` | `/data-packages` | List configured data packages |
-
-Protected routes require the `X-API-Key` header, the `talq-api-version: 2.7.1` header, and the `clientAddress` query parameter.
-
-These are currently pilot endpoint implementations. Their presence and request conventions do **not** establish full conformance with TALQ 2.7.1. Request and response schemas, mandatory operations, error behavior, and security requirements must be validated against the official specification.
-
-### Example health-check request
-
-```http
-GET /health
-```
-
-Example response:
-
-```json
-{
-  "status": "ok",
-  "service": "FlowSense TALQ Gateway",
-  "environment": "production"
-}
-```
-
-### Example protected request
-
-```http
-GET /devices?clientAddress=test-client
-X-API-Key: YOUR_API_KEY
-talq-api-version: 2.7.1
-```
-
-The current device collection is empty until actual or explicitly configured device records are added.
-
-## Authentication and Security
-
-The pilot uses an API key to restrict access to protected routes.
-
-### Current safeguards
-
-- API key supplied through an environment variable.
-- Authentication for protected endpoints.
-- Constant-time API-key comparison.
-- Optional restriction to a configured client address.
-- Environment-based configuration.
-- `.env` exclusion through `.gitignore`.
-- Docker-based deployment configuration.
-
-### Production security requirements
-
-Before connecting an external CMS or real IoT infrastructure, the service should be enhanced with:
-
-- HTTPS/TLS and appropriate certificate management.
-- Authentication and client identity mechanisms compatible with the target TALQ implementation.
-- Least-privilege access controls and secret rotation.
-- Request validation, rate limiting, and abuse protection.
-- Structured audit logs and monitoring.
-- Secure error handling and dependency updates.
-- Appropriate network restrictions and production environment configuration.
-
-The current shared API-key mechanism is a pilot safeguard; it should not be assumed to satisfy every TALQ security requirement.
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.11
-- Git
-- Windows PowerShell or another supported terminal
-- Internet access for installing dependencies
-
-### 1. Clone the repository
+Prerequisites: Python 3.11 and Git.
 
 ```powershell
 git clone https://github.com/ayush2459/talq-api-key.git
 cd talq-api-key
-```
-
-### 2. Create a virtual environment
-
-```powershell
 py -3.11 -m venv .venv
-```
-
-### 3. Install dependencies
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-### 4. Configure environment variables
-
-Create a local environment file:
-
-```powershell
+.\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Generate a strong API key:
+Generate a strong admin secret:
 
 ```powershell
 py -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Open `.env` and configure it:
+Put the generated value into `ADMIN_API_KEY` in `.env`. Do not use a client API key as the admin key, and never commit `.env`.
+
+The local example uses SQLite:
 
 ```dotenv
-FLOWSENSE_API_KEY=replace-with-your-generated-secret
+ADMIN_API_KEY=replace-with-your-generated-admin-secret
+DATABASE_URL=sqlite:///./flowsense_talq.db
 TALQ_CLIENT_ADDRESS=
 DEMO_MODE=true
 ```
 
-Replace the example API key with the generated secret. Keep `.env` private and never commit it to GitHub.
-
-### 5. Start the application
+Start the service:
 
 ```powershell
-.\RUN_WINDOWS.ps1
+.\\RUN_WINDOWS.ps1
 ```
 
-### 6. Open the API documentation
+Open [Swagger UI](http://127.0.0.1:8000/docs) or the [health endpoint](http://127.0.0.1:8000/health).
 
-Once the server starts, visit:
-
-- **Swagger UI:** http://127.0.0.1:8000/docs
-- **Health check:** http://127.0.0.1:8000/health
-
-Swagger UI provides an interactive way to inspect endpoints and send test requests.
-
-## Running Tests
-
-Install the test dependencies into the project's virtual environment:
+### Run tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install pytest httpx
+.\\.venv\\Scripts\\python.exe -m pip install pytest httpx
+.\\.venv\\Scripts\\python.exe -m pytest -q
 ```
 
-Run the test suite:
+## Deploying on Render
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+The repository includes a Dockerfile and Render Blueprint. For approval and API-key records to survive restarts and deployments, configure a **persistent PostgreSQL database**:
+
+1. Create a PostgreSQL database in Render (or use an existing managed PostgreSQL database).
+2. Copy its private/internal connection URL into the web service's `DATABASE_URL` environment variable when the database and web service are in the same Render region.
+3. Deploy the Blueprint and confirm `ADMIN_API_KEY` has a strong generated value. Keep it private.
+4. Keep `DEMO_MODE=true` until real FlowSense integration is complete.
+5. Test the health endpoint and submit a sample access request.
+
+Do not rely on the default SQLite file for a cloud deployment: local files on ephemeral hosting may be lost during redeploys or restarts. Never commit database credentials or admin secrets to GitHub.
+
+## Example access workflow
+
+Submit a request in Swagger UI using `POST /access-requests`:
+
+```json
+{
+  "contact_name": "Example Contact",
+  "email": "integration@example.com",
+  "organization": "Example Organization",
+  "purpose": "Integrate our CMS with FlowSense gateway data for a pilot.",
+  "client_address": "cms-example-01"
+}
 ```
 
-The initial four-test suite covers basic health-check behavior, API-key enforcement, required TALQ-style request parameters, and service discovery.
+An administrator then lists pending requests and approves the returned request ID. The approval response contains the new key once. Use that key in the `X-API-Key` header for protected endpoints and include `clientAddress=cms-example-01`.
 
-A successful local run previously reported **4 passed**. This validates the tested pilot behaviors only; it is not a substitute for full protocol conformance or CMS integration testing.
+## Security notes and production work
 
-## Deployment on Render
+- Keep `ADMIN_API_KEY` restricted to trusted administrators.
+- The raw client API key is returned once; only its hash is persisted.
+- Revoke a key if it is exposed or no longer needed.
+- The public request endpoint should be protected with rate limiting, abuse monitoring, and optionally CAPTCHA/email verification before broad public release.
+- Use HTTPS, rotate credentials, review logs, and implement suitable client authentication and access controls.
+- Validate all relevant request/response schemas and security requirements against the official TALQ specification and the intended CMS.
+- The current admin key is a shared administrative secret, not a full user-management or identity-provider system.
 
-The repository includes a `Dockerfile` and `render.yaml` for a Render Blueprint deployment.
+## Current limitations
 
-### Deployment procedure
+- No live MQTT, sensor, meter, or production database integration with FlowSense business data.
+- Device and data-package lists are empty placeholders.
+- Only a limited set of gateway-style routes is present.
+- No complete TALQ schema validation or external CMS interoperability test has been demonstrated.
+- The service is not TALQ-certified.
 
-1. Sign in to [Render](https://dashboard.render.com/).
-2. Connect your GitHub account.
-3. Create a new Blueprint and select `ayush2459/talq-api-key`.
-4. Review the service configuration from `render.yaml`.
-5. Configure `FLOWSENSE_API_KEY` as a strong secret in Render.
-6. Keep `DEMO_MODE=true` until real data integration and validation are complete.
-7. Deploy and inspect the build logs.
-8. Open the deployed `/health` endpoint to verify service availability.
+## Roadmap
 
-The deployment URL will be assigned by Render.
-
-**Deployment note:** A successful deployment means the web service is running. It does not mean that the gateway is certified, interoperable with a particular CMS, or connected to real FlowSense data.
-
-## Current Limitations
-
-The current pilot is intentionally limited:
-
-- Device and data-package collections contain no real records.
-- No live MQTT ingestion or sensor integration is implemented.
-- No production database integration is implemented.
-- TALQ request and response schemas have not been fully validated.
-- Only a subset of gateway-style routes is implemented.
-- The API-key mechanism is not a complete TALQ security implementation.
-- Interoperability with an external CMS has not been demonstrated.
-- TALQ certification has not been obtained.
-
-These limitations define the remaining engineering work rather than implying functionality that has not yet been built.
-
-## Development Roadmap
-
-### Phase 1 — Gateway foundation
-- [x] FastAPI application scaffold
-- [x] Initial gateway-style routes
-- [x] API-key protection
-- [x] Environment configuration
-- [x] Basic automated tests
-- [x] Docker and Render deployment files
-
-### Phase 2 — FlowSense integration
-- [ ] Connect the gateway to actual FlowSense services and database records.
-- [ ] Map energy and water meter readings to the appropriate data model.
-- [ ] Implement device identity, status, and data retrieval from real records.
-- [ ] Add validation for missing, invalid, and stale readings.
-
-### Phase 3 — TALQ interoperability
-- [ ] Validate the required operations and payloads against the official TALQ specification.
-- [ ] Implement applicable request and response schemas.
-- [ ] Verify error responses, pagination, and protocol-specific behavior where required.
-- [ ] Test against the intended CMS and its supported TALQ version.
-
-### Phase 4 — Production readiness
-- [ ] Harden authentication and transport security.
-- [ ] Add observability, audit logging, and operational alerts.
-- [ ] Add integration and regression tests.
-- [ ] Document deployment, recovery, and secret-rotation procedures.
-- [ ] Evaluate formal conformance and certification requirements.
+- [x] Basic FastAPI gateway scaffold and protected routes.
+- [x] Access request, administrator approval, per-client key issuance, and revocation workflow.
+- [x] Store issued API keys as hashes.
+- [ ] Add rate limiting, email verification, audit events, and richer admin identity management.
+- [ ] Map real FlowSense meter and sensor data into applicable TALQ models.
+- [ ] Validate the required operations and payloads against the official specification.
+- [ ] Run integration tests with the target CMS and review production security.
 
 ## References
 
-- **GitHub repository:** https://github.com/ayush2459/talq-api-key
-- **TALQ Consortium specification repository:** https://github.com/TALQ-consortium/TALQ_specification
-- **FastAPI documentation:** https://fastapi.tiangolo.com/
-- **Render documentation:** https://render.com/docs
-
----
-
-**Built as an interoperability foundation for FlowSense.** The next milestone is to connect real FlowSense meter and sensor data, validate the applicable TALQ schemas, and demonstrate interoperability with a compatible CMS.
+- Repository: https://github.com/ayush2459/talq-api-key
+- TALQ Consortium specification: https://github.com/TALQ-consortium/TALQ_specification
+- FastAPI: https://fastapi.tiangolo.com/
+- Render: https://render.com/docs

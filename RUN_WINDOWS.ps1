@@ -6,7 +6,7 @@ if (-not (Test-Path '.\.venv\Scripts\python.exe')) {
 
 if (-not (Test-Path '.env')) {
     Copy-Item '.env.example' '.env'
-    Write-Host 'Created .env from .env.example. Edit .env and set FLOWSENSE_API_KEY, then run this script again.' -ForegroundColor Yellow
+    Write-Host 'Created .env from .env.example. Edit .env and set ADMIN_API_KEY, then run this script again.' -ForegroundColor Yellow
     exit 1
 }
 
@@ -18,8 +18,8 @@ Get-Content '.env' | ForEach-Object {
     }
 }
 
-if (-not $env:FLOWSENSE_API_KEY -or $env:FLOWSENSE_API_KEY -eq 'replace-with-a-long-random-secret') {
-    throw 'Set a unique FLOWSENSE_API_KEY in .env before starting the service.'
+if (-not $env:ADMIN_API_KEY -or $env:ADMIN_API_KEY -eq 'replace-with-a-long-random-secret') {
+    throw 'Set a unique ADMIN_API_KEY in .env before starting the service.'
 }
 
 & '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt

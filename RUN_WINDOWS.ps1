@@ -18,7 +18,7 @@ Get-Content '.env' | ForEach-Object {
     }
 }
 
-if (-not $env:ADMIN_API_KEY -or $env:ADMIN_API_KEY -eq 'replace-with-a-long-random-secret') {
+if (-not $env:ADMIN_API_KEY -or $env:ADMIN_API_KEY -eq 'replace-with-a-long-random-admin-secret') {
     throw 'Set a unique ADMIN_API_KEY in .env before starting the service.'
 }
 

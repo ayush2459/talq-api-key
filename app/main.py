@@ -272,6 +272,19 @@ def revoke_api_key(key_id: int, db: Session = Depends(get_db)) -> dict[str, Any]
     return {"api_key_id": record.id, "revoked": True}
 
 
+@app.get("/auth/verify", tags=["Authentication"])
+def verify_api_key(api_key: ClientAPIKey = Depends(require_api_key)) -> dict[str, Any]:
+    """Verify a client credential and return safe metadata for the authenticated integration."""
+    return {
+        "authenticated": True,
+        "organization": api_key.organization,
+        "client_address": api_key.client_address,
+        "api_key_id": api_key.id,
+        "key_prefix": api_key.key_prefix,
+        "message": "API key is valid. Do not share the key in logs or support tickets.",
+    }
+
+
 @app.get("/integration-status", dependencies=[Depends(require_api_key)])
 def integration_status(api_key: ClientAPIKey = Depends(require_api_key)) -> dict[str, Any]:
     return {

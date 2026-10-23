@@ -8,6 +8,7 @@ import re
 import secrets
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
@@ -113,16 +114,17 @@ def require_admin_key(x_admin_key: str | None = Header(default=None, alias="X-Ad
 
 def require_talq_headers(
     talq_api_version: str | None = Header(default=None, alias="talq-api-version"),
-    client_address: str = Query(..., alias="clientAddress"),
+    client_address: UUID = Query(..., alias="clientAddress", description="UUID address of the CMS as required by TALQ 2.7.1"),
     api_key: ClientAPIKey = Depends(require_api_key),
 ) -> str:
     if talq_api_version != "2.7.1":
         raise HTTPException(status_code=400, detail="talq-api-version must be 2.7.1")
-    if client_address != api_key.client_address:
+    client_address_text = str(client_address)
+    if client_address_text != api_key.client_address:
         raise HTTPException(status_code=403, detail="clientAddress does not match the approved API key")
-    if EXPECTED_CLIENT_ADDRESS and client_address != EXPECTED_CLIENT_ADDRESS:
+    if EXPECTED_CLIENT_ADDRESS and client_address_text != EXPECTED_CLIENT_ADDRESS:
         raise HTTPException(status_code=403, detail="Unapproved clientAddress")
-    return client_address
+    return client_address_text
 
 
 class AccessRequestInput(BaseModel):
@@ -130,7 +132,7 @@ class AccessRequestInput(BaseModel):
     email: str = Field(min_length=5, max_length=254)
     organization: str = Field(min_length=2, max_length=160)
     purpose: str = Field(min_length=10, max_length=2000)
-    client_address: str = Field(min_length=2, max_length=160)
+    client_address: UUID = Field(description="Stable UUID address assigned to the partner CMS")
 
 
 def validate_email(email: str) -> bool:
@@ -151,7 +153,7 @@ def request_access(payload: AccessRequestInput, db: Session = Depends(get_db)) -
     pending = db.scalar(
         select(AccessRequest).where(
             AccessRequest.email == email,
-            AccessRequest.client_address == payload.client_address.strip(),
+            AccessRequest.client_address == str(payload.client_address),
             AccessRequest.status == "pending",
         )
     )
@@ -162,7 +164,7 @@ def request_access(payload: AccessRequestInput, db: Session = Depends(get_db)) -
         email=email,
         organization=payload.organization.strip(),
         purpose=payload.purpose.strip(),
-        client_address=payload.client_address.strip(),
+        client_address=str(payload.client_address),
         status="pending",
     )
     db.add(item)

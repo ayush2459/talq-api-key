@@ -21,7 +21,7 @@ def submit_request(client):
             "email": "client@example.com",
             "organization": "Example Org",
             "purpose": "Integrate our management system with FlowSense device data.",
-            "client_address": "cms-example-01",
+            "client_address": "00000000-0000-4000-8000-000000000001",
         },
     )
     assert response.status_code == 201
@@ -78,7 +78,7 @@ def test_approved_key_is_bound_to_client_address(monkeypatch, tmp_path):
         headers={"X-Admin-Key": "test-admin-secret"},
     ).json()
     response = client.get(
-        "/services?clientAddress=wrong-client",
+        "/services?clientAddress=00000000-0000-4000-8000-000000000002",
         headers={"X-API-Key": approval["api_key"], "talq-api-version": "2.7.1"},
     )
     assert response.status_code == 403
@@ -117,4 +117,19 @@ def test_auth_verify_returns_authenticated_client_metadata(monkeypatch, tmp_path
     body = response.json()
     assert body["authenticated"] is True
     assert body["organization"] == "Example Org"
-    assert body["client_address"] == "cms-example-01"
+    assert body["client_address"] == "00000000-0000-4000-8000-000000000001"
+
+
+def test_access_request_rejects_non_uuid_client_address(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    response = client.post(
+        "/access-requests",
+        json={
+            "contact_name": "Test User",
+            "email": "client@example.com",
+            "organization": "Example Org",
+            "purpose": "Integrate our management system with FlowSense device data.",
+            "client_address": "cms-example-01",
+        },
+    )
+    assert response.status_code == 422

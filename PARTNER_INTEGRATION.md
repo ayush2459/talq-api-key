@@ -68,3 +68,8 @@ CORS is normally unnecessary for backend-to-backend HTTP calls. Use HTTPS and se
 - Confirm the intended TALQ version and required endpoint schemas with the partner.
 - Connect and validate actual FlowSense data before promising device/measurement access.
 - Run an interoperability test with the partner's backend. API-key authentication alone does not establish TALQ conformance or certification.
+
+
+## TALQ clientAddress requirement
+
+For TALQ 2.7.1 Gateway operations, the `clientAddress` query parameter is the **CMS address** and must be a UUID. Ask the partner to provide the stable UUID configured for its CMS; do not use a company slug, hostname, or IP address. The gateway binds that UUID to the approved API key. Example only: `00000000-0000-4000-8000-000000000001` (replace with the partner's real CMS UUID).

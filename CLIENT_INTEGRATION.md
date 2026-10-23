@@ -89,3 +89,8 @@ Configure `FLOWSENSE_GATEWAY_URL`, `FLOWSENSE_API_KEY`, and `FLOWSENSE_CLIENT_AD
 ## Important scope limitation
 
 The gateway currently authenticates callers, but `/devices` and `/data-packages` return empty placeholder collections until real FlowSense device/meter data is connected and mapped. Successful authentication therefore does not yet mean live FlowSense data is available. The current scaffold is not a complete or TALQ-certified implementation; confirm the required TALQ operations and payload schemas with the target CMS before production use.
+
+
+## TALQ clientAddress requirement
+
+For TALQ 2.7.1 Gateway operations, the `clientAddress` query parameter is the **CMS address** and must be a UUID. Ask the partner to provide the stable UUID configured for its CMS; do not use a company slug, hostname, or IP address. The gateway binds that UUID to the approved API key. Example only: `00000000-0000-4000-8000-000000000001` (replace with the partner's real CMS UUID).

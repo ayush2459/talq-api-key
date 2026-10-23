@@ -99,3 +99,22 @@ def test_revoked_key_stops_working(monkeypatch, tmp_path):
     assert client.get(
         "/integration-status", headers={"X-API-Key": approval["api_key"]}
     ).status_code == 401
+
+def test_auth_verify_returns_authenticated_client_metadata(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    request_id = submit_request(client)
+    approval = client.post(
+        f"/admin/access-requests/{request_id}/approve",
+        headers={"X-Admin-Key": "test-admin-secret"},
+    ).json()
+
+    response = client.get(
+        "/auth/verify",
+        headers={"X-API-Key": approval["api_key"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["authenticated"] is True
+    assert body["organization"] == "Example Org"
+    assert body["client_address"] == "cms-example-01"

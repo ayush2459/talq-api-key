@@ -29,6 +29,11 @@ Only a SHA-256 hash of each issued API key is stored in the database. The raw ke
 - `GET /admin/api-keys` — list key metadata, never raw keys.
 - `POST /admin/api-keys/{key_id}/revoke` — revoke an issued key.
 
+### Client authentication
+- `GET /auth/verify` — verify an issued client API key and return safe organization/client metadata. Requires `X-API-Key`.
+
+See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for the partner-backend request examples and Python client sample.
+
 ### Protected gateway pilot routes (requires `X-API-Key`)
 - `GET /integration-status`
 - `GET /devices`

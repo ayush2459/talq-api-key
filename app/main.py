@@ -59,8 +59,11 @@ class AccessRequest(Base):
     organization: Mapped[str] = mapped_column(String(160))
     purpose: Mapped[str] = mapped_column(Text)
     client_address: Mapped[str] = mapped_column(String(160))
-    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending_verification", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    verification_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    verification_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ClientAPIKey(Base):

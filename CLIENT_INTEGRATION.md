@@ -16,19 +16,26 @@ Send `POST /access-requests` with JSON:
   "email": "integration@example.com",
   "organization": "Partner Organization",
   "purpose": "Backend integration with FlowSense gateway",
-  "client_address": "partner-system-01"
+  "client_address": "00000000-0000-4000-8000-000000000001"
 }
 ```
 
-The response contains a request ID. A request does not grant access until the gateway administrator approves it.
+Use the real, stable UUID configured for the partner CMS as `client_address`. Do not use a company slug, hostname, or IP address. The endpoint sends a one-time verification token to the supplied email. The token expires after 30 minutes by default. A request does not issue a key until the email is verified.
 
-## 2. Administrator approves the request
+## 2. Verify email and receive a key automatically
 
-Use Swagger UI or an HTTP client to call:
+The email contains a token. Exchange it by calling:
 
-`POST /admin/access-requests/{request_id}/approve`
+```http
+POST /verify-email
+Content-Type: application/json
 
-Include the secret admin header `X-Admin-Key`. The response contains the client API key once. The administrator must securely send that key to the partner through an approved secret-sharing channel. Never send the admin key to the partner.
+{"token": "<token-from-verification-email>"}
+```
+
+A successful response contains `api_key`, `api_key_id`, `client_address`, `created_at`, `expires_at`, and `lifetime_days`. **Copy the API key immediately**; it is returned once only. The gateway stores only the key hash. There is no manual administrator approval step.
+
+The verification token is single-use. An invalid, expired, or previously used token is rejected.
 
 ## 3. Verify the key
 
@@ -42,12 +49,12 @@ A successful response confirms authentication and returns safe metadata for the 
 ## 4. Call a gateway route
 
 ```http
-GET /devices?clientAddress=partner-system-01
+GET /devices?clientAddress=00000000-0000-4000-8000-000000000001
 X-API-Key: <issued-client-api-key>
 talq-api-version: 2.7.1
 ```
 
-Use the exact `clientAddress` approved for that API key. Gateway routes that require TALQ-style headers reject a mismatched address.
+Use the exact CMS UUID registered with that API key. Gateway routes that require TALQ-style headers reject a mismatched address.
 
 ## 5. Python example
 
@@ -84,7 +91,7 @@ with urllib.request.urlopen(verify_request, timeout=15) as response:
 print(get_json(f"/devices?clientAddress={CLIENT_ADDRESS}"))
 ```
 
-Configure `FLOWSENSE_GATEWAY_URL`, `FLOWSENSE_API_KEY`, and `FLOWSENSE_CLIENT_ADDRESS` as environment variables on the partner backend. Do not hard-code credentials.
+Configure `FLOWSENSE_GATEWAY_URL`, `FLOWSENSE_API_KEY`, and `FLOWSENSE_CLIENT_ADDRESS` as environment variables on the partner backend. Do not hard-code credentials. Keys expire after 90 days by default; the `expires_at` value in the issuance response is authoritative. Obtain a new key by repeating email verification before expiry and update the secret in your backend.
 
 ## Important scope limitation
 
@@ -94,3 +101,13 @@ The gateway currently authenticates callers, but `/devices` and `/data-packages`
 ## TALQ clientAddress requirement
 
 For TALQ 2.7.1 Gateway operations, the `clientAddress` query parameter is the **CMS address** and must be a UUID. Ask the partner to provide the stable UUID configured for its CMS; do not use a company slug, hostname, or IP address. The gateway binds that UUID to the approved API key. Example only: `00000000-0000-4000-8000-000000000001` (replace with the partner's real CMS UUID).
+
+
+## API-key lifetime and errors
+
+- Default API-key lifetime: 90 days (`API_KEY_LIFETIME_DAYS`).
+- Email verification token lifetime: 30 minutes (`EMAIL_VERIFICATION_MINUTES`).
+- Expired or revoked API keys return HTTP 401. The client should stop retrying with the same key and obtain a fresh key through the email-verification flow.
+- The gateway's administrator can inspect key metadata and expiration with `GET /admin/api-keys`, and revoke a key with `POST /admin/api-keys/{key_id}/revoke`. The administrator key is never sent to the partner.
+- The gateway owner must configure SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, and `SMTP_USE_STARTTLS`) in the deployment secret settings. Do not put SMTP credentials in source control.
+- Before deploying over an existing PostgreSQL database, back it up and apply `migrations/001_email_verification_and_key_expiration.postgresql.sql`. Existing keys are assigned an expiration 90 days after their original creation time.

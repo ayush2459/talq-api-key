@@ -24,4 +24,4 @@ jobs:
           ADMIN_API_KEY: ci-test-admin-key
           API_KEY_LIFETIME_DAYS: "90"
           EMAIL_VERIFICATION_MINUTES: "30"
-        run: pytest -q
+        run: python -m pytest -q

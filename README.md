@@ -64,7 +64,7 @@ py -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Put the generated value into `ADMIN_API_KEY` in `.env`. Do not use a client API key as the admin key, and never commit `.env`.
 
-The local example uses SQLite:
+The local example uses SQLite. Configure SMTP for real verification-email delivery; tests mock the email sender:
 
 ```dotenv
 ADMIN_API_KEY=replace-with-your-generated-admin-secret
@@ -119,7 +119,7 @@ Submit a request in Swagger UI using `POST /access-requests`:
   "email": "integration@example.com",
   "organization": "Example Organization",
   "purpose": "Integrate our CMS with FlowSense gateway data for a pilot.",
-  "client_address": "cms-example-01"
+  "client_address": "00000000-0000-4000-8000-000000000001"
 }
 ```
 

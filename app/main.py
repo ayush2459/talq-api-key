@@ -116,6 +116,9 @@ def require_api_key(
     record = db.scalar(select(ClientAPIKey).where(ClientAPIKey.key_hash == hash_api_key(x_api_key)))
     if record is None or record.revoked_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
+    expires_at = _utc(record.expires_at)
+    if expires_at is not None and expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired; request a new key")
     return record
 
 

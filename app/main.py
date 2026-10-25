@@ -17,7 +17,7 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 APP_ENV = os.getenv("APP_ENV", "production")
@@ -64,6 +64,9 @@ class AccessRequest(Base):
     verification_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     verification_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lifetime_days: Mapped[int] = mapped_column(Integer, default=90)
+    management_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    management_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ClientAPIKey(Base):
@@ -78,7 +81,7 @@ class ClientAPIKey(Base):
     key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc) + timedelta(days=API_KEY_LIFETIME_DAYS), index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=lambda: datetime.now(timezone.utc) + timedelta(days=API_KEY_LIFETIME_DAYS), index=True)
 
 
 Base.metadata.create_all(bind=engine)
@@ -153,6 +156,7 @@ class AccessRequestInput(BaseModel):
     organization: str = Field(min_length=2, max_length=160)
     purpose: str = Field(min_length=10, max_length=2000)
     client_address: UUID = Field(description="Stable UUID address assigned to the partner CMS")
+    lifetime_days: int = Field(default=90, description="Allowed values: 90, 180, 365, or 0 for never-expiring", ge=0, le=365)
 
 
 def validate_email(email: str) -> bool:
@@ -197,7 +201,7 @@ def _utc(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
-def _new_client_key(item: AccessRequest, db: Session) -> tuple[ClientAPIKey, str]:
+def _new_client_key(item: AccessRequest, db: Session) -> tuple[ClientAPIKey, str, str]:
     raw_key = "fs_talq_" + secrets.token_urlsafe(36)
     now = datetime.now(timezone.utc)
     record = ClientAPIKey(
@@ -209,14 +213,17 @@ def _new_client_key(item: AccessRequest, db: Session) -> tuple[ClientAPIKey, str
         key_prefix=raw_key[:15],
         key_hash=hash_api_key(raw_key),
         created_at=now,
-        expires_at=now + timedelta(days=API_KEY_LIFETIME_DAYS),
+        expires_at=(now + timedelta(days=item.lifetime_days)) if item.lifetime_days else None,
     )
     item.status = "verified"
     item.email_verified_at = now
     item.verification_token_hash = None
     item.verification_expires_at = None
+    management_token = secrets.token_urlsafe(32)
+    item.management_token_hash = hash_api_key(management_token)
+    item.management_token_expires_at = now + timedelta(hours=24)
     db.add(record)
-    return record, raw_key
+    return record, raw_key, management_token
 
 
 @app.post("/access-requests", status_code=201, tags=["Access management"])
@@ -226,7 +233,7 @@ def request_access(payload: AccessRequestInput, db: Session = Depends(get_db)) -
         raise HTTPException(status_code=422, detail="Enter a valid email address")
     email = payload.email.strip().lower()
     now = datetime.now(timezone.utc)
-    token = secrets.token_urlsafe(32)
+    token = f"{secrets.randbelow(1_000_000):06d}"
     token_hash = hash_api_key(token)
     item = db.scalar(
         select(AccessRequest).where(
@@ -245,6 +252,7 @@ def request_access(payload: AccessRequestInput, db: Session = Depends(get_db)) -
             status="pending_verification",
         )
         db.add(item)
+    item.lifetime_days = payload.lifetime_days
     item.verification_token_hash = token_hash
     item.verification_expires_at = now + timedelta(minutes=EMAIL_VERIFICATION_MINUTES)
     try:
@@ -266,7 +274,7 @@ def request_access(payload: AccessRequestInput, db: Session = Depends(get_db)) -
 
 
 class EmailVerificationInput(BaseModel):
-    token: str = Field(min_length=20, max_length=256)
+    token: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 
 @app.post("/verify-email", tags=["Access management"])
@@ -291,7 +299,7 @@ def verify_email_and_issue_key(
         item.verification_expires_at = None
         db.commit()
         raise HTTPException(status_code=400, detail="Invalid, expired, or already-used verification token")
-    record, raw_key = _new_client_key(item, db)
+    record, raw_key, management_token = _new_client_key(item, db)
     db.commit()
     db.refresh(record)
     return {
@@ -301,10 +309,40 @@ def verify_email_and_issue_key(
         "api_key": raw_key,
         "client_address": record.client_address,
         "created_at": record.created_at.isoformat(),
-        "expires_at": record.expires_at.isoformat(),
-        "lifetime_days": API_KEY_LIFETIME_DAYS,
+        "expires_at": record.expires_at.isoformat() if record.expires_at else None,
+        "lifetime_days": item.lifetime_days,
+        "management_token": management_token,
         "warning": "Copy this key now. It is shown once; only its hash is stored.",
     }
+
+
+
+class RevokeOwnKeyInput(BaseModel):
+    api_key_id: int = Field(gt=0)
+    email: str = Field(min_length=5, max_length=254)
+    client_address: UUID
+    management_token: str = Field(min_length=20, max_length=256)
+
+
+@app.post("/account/revoke-key", tags=["Access management"])
+def revoke_own_key(payload: RevokeOwnKeyInput, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Revoke a key belonging to the verified request; management token expires after 24 hours."""
+    request_item = db.scalar(select(AccessRequest).where(
+        AccessRequest.email == payload.email.strip().lower(),
+        AccessRequest.client_address == str(payload.client_address),
+        AccessRequest.status == "verified",
+        AccessRequest.management_token_hash == hash_api_key(payload.management_token),
+    ))
+    expiry = _utc(request_item.management_token_expires_at) if request_item else None
+    if request_item is None or expiry is None or expiry <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Management session expired. Verify your email again to manage keys.")
+    record = db.get(ClientAPIKey, payload.api_key_id)
+    if record is None or record.access_request_id != request_item.id:
+        raise HTTPException(status_code=404, detail="API key not found for this verified request")
+    if record.revoked_at is None:
+        record.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"api_key_id": record.id, "revoked": True, "message": "API key revoked."}
 
 
 @app.get("/admin/access-requests", tags=["Admin"], dependencies=[Depends(require_admin_key)])

@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: ["main", "talq-2.7.1-conformance"]
+    branches: ["main", "talq-2.7.1-conformance", "telegram-backend-integration"]
   pull_request:
   workflow_dispatch:
 
@@ -23,5 +23,8 @@ jobs:
         env:
           ADMIN_API_KEY: ci-test-admin-key
           API_KEY_LIFETIME_DAYS: "90"
-          EMAIL_VERIFICATION_MINUTES: "30"
+          TELEGRAM_VERIFICATION_MINUTES: "30"
+          TELEGRAM_BOT_TOKEN: "123456:test-bot-token"
+          TELEGRAM_BOT_USERNAME: "FlowSenseTestBot"
+          TELEGRAM_WEBHOOK_SECRET: "ci-test-webhook-secret"
         run: python -m pytest -q

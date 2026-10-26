@@ -90,10 +90,11 @@ def list_live_devices(
 ) -> dict[str, Any]:
     clause, params = _filters(facility_code)
     params["limit"] = limit
+    # iot_devices has no created_at column in the FlowSense ORM schema.
     rows = _rows("""
         SELECT d.iot_device_id, d.device_code, d.device_name, d.device_model,
                d.firmware_version, d.communication_protocol, d.installation_location,
-               d.status, d.last_seen_at, d.created_at,
+               d.status, d.last_seen_at,
                f.facility_id, f.facility_code, f.facility_name
         FROM iot_devices d
         JOIN facilities f ON f.facility_id = d.facility_id

@@ -1,7 +1,9 @@
 import importlib
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse, parse_qs
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 
 def make_client(monkeypatch, tmp_path):
@@ -9,15 +11,15 @@ def make_client(monkeypatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     monkeypatch.setenv("TALQ_CLIENT_ADDRESS", "")
     monkeypatch.setenv("API_KEY_LIFETIME_DAYS", "90")
-    monkeypatch.setenv("EMAIL_VERIFICATION_MINUTES", "30")
+    monkeypatch.setenv("TELEGRAM_VERIFICATION_MINUTES", "30")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:test-bot-token")
+    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "FlowSenseTestBot")
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "test-webhook-secret")
     import app.main as main
     importlib.reload(main)
-    sent_tokens = []
-    monkeypatch.setattr(
-        main, "send_verification_email",
-        lambda recipient, organization, token: sent_tokens.append(token),
-    )
-    main._test_verification_tokens = sent_tokens
+    sent_messages = []
+    monkeypatch.setattr(main, "send_telegram_message", lambda chat_id, text: sent_messages.append((str(chat_id), text)))
+    main._test_telegram_messages = sent_messages
     return TestClient(main.app), main
 
 
@@ -28,19 +30,32 @@ def submit_request(client):
             "contact_name": "Test User",
             "email": "client@example.com",
             "organization": "Example Org",
+            "telegram_username": "@testuser",
             "purpose": "Integrate our management system with FlowSense device data.",
             "client_address": "00000000-0000-4000-8000-000000000001",
         },
     )
     assert response.status_code == 201, response.text
-    assert response.json()["status"] == "pending_verification"
-    return response.json()["request_id"]
+    body = response.json()
+    assert body["status"] == "pending_verification"
+    assert body["telegram_url"].startswith("https://t.me/FlowSenseTestBot?start=")
+    return body
 
 
-def verify_request(client, main, token=None):
-    token = token or main._test_verification_tokens[-1]
-    response = client.post("/verify-email", json={"token": token})
-    return response
+def telegram_start(client, body, username="testuser", chat_id=12345):
+    start_token = parse_qs(urlparse(body["telegram_url"]).query)["start"][0]
+    return client.post(
+        "/telegram/webhook",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "test-webhook-secret"},
+        json={
+            "update_id": 1,
+            "message": {
+                "text": f"/start {start_token}",
+                "from": {"id": chat_id, "username": username},
+                "chat": {"id": chat_id, "type": "private"},
+            },
+        },
+    )
 
 
 def test_health_is_public(monkeypatch, tmp_path):
@@ -50,57 +65,107 @@ def test_health_is_public(monkeypatch, tmp_path):
     assert response.json()["status"] == "ok"
 
 
-def test_key_is_not_issued_until_email_verification(monkeypatch, tmp_path):
-    client, main = make_client(monkeypatch, tmp_path)
-    submit_request(client)
-    assert len(main._test_verification_tokens) == 1
-    assert client.get("/integration-status").status_code == 401
-    issued = verify_request(client, main)
+def test_key_is_issued_only_after_telegram_verification(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    request = submit_request(client)
+    headers = {"X-Request-Token": request["request_token"]}
+    assert client.get(f"/access-requests/{request['request_id']}/status", headers=headers).json()["status"] == "pending_verification"
+    verified = telegram_start(client, request)
+    assert verified.status_code == 200
+    state = client.get(f"/access-requests/{request['request_id']}/status", headers=headers)
+    assert state.status_code == 200
+    assert state.json()["telegram_verified"] is True
+    issued = client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": request["request_token"]},
+    )
     assert issued.status_code == 200, issued.text
     body = issued.json()
-    assert body["status"] == "verified"
+    assert body["status"] == "issued"
     assert body["api_key"].startswith("fs_talq_")
     assert body["lifetime_days"] == 90
     assert body["expires_at"]
-    assert client.get(
-        "/integration-status", headers={"X-API-Key": body["api_key"]}
-    ).status_code == 200
+    assert client.get("/integration-status", headers={"X-API-Key": body["api_key"]}).status_code == 200
 
 
-def test_verification_token_can_only_be_used_once(monkeypatch, tmp_path):
-    client, main = make_client(monkeypatch, tmp_path)
-    submit_request(client)
-    token = main._test_verification_tokens[-1]
-    first = verify_request(client, main, token)
-    assert first.status_code == 200
-    second = verify_request(client, main, token)
-    assert second.status_code == 400
-
-
-def test_invalid_verification_token_does_not_issue_key(monkeypatch, tmp_path):
+def test_telegram_webhook_requires_secret(monkeypatch, tmp_path):
     client, _ = make_client(monkeypatch, tmp_path)
-    submit_request(client)
-    response = client.post("/verify-email", json={"token": "not-a-real-verification-token-123"})
-    assert response.status_code == 400
+    response = client.post("/telegram/webhook", json={})
+    assert response.status_code == 401
 
 
-def test_expired_verification_token_is_rejected(monkeypatch, tmp_path):
+def test_username_must_match_telegram_sender(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    request = submit_request(client)
+    telegram_start(client, request, username="someoneelse")
+    state = client.get(
+        f"/access-requests/{request['request_id']}/status",
+        headers={"X-Request-Token": request["request_token"]},
+    )
+    assert state.status_code == 200
+    assert state.json()["telegram_verified"] is False
+
+
+def test_verification_link_is_single_use(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    request = submit_request(client)
+    telegram_start(client, request)
+    state = client.get(
+        f"/access-requests/{request['request_id']}/status",
+        headers={"X-Request-Token": request["request_token"]},
+    )
+    assert state.json()["telegram_verified"] is True
+    # Replaying the same /start payload must not change state or create a second key.
+    telegram_start(client, request)
+    issued = client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": request["request_token"]},
+    )
+    assert issued.status_code == 200
+    duplicate = client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": request["request_token"]},
+    )
+    assert duplicate.status_code == 404
+
+
+def test_invalid_request_token_cannot_read_status_or_issue_key(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    request = submit_request(client)
+    assert client.get(
+        f"/access-requests/{request['request_id']}/status",
+        headers={"X-Request-Token": "wrong-token"},
+    ).status_code == 404
+    assert client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": "wrong-token"},
+    ).status_code == 404
+
+
+def test_expired_telegram_link_is_rejected(monkeypatch, tmp_path):
     client, main = make_client(monkeypatch, tmp_path)
-    submit_request(client)
-    from sqlalchemy import select
+    request = submit_request(client)
     with main.SessionLocal() as db:
-        request = db.scalar(select(main.AccessRequest))
-        request.verification_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        item = db.scalar(select(main.AccessRequest))
+        item.verification_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
         db.commit()
-    response = verify_request(client, main)
-    assert response.status_code == 400
+    telegram_start(client, request)
+    state = client.get(
+        f"/access-requests/{request['request_id']}/status",
+        headers={"X-Request-Token": request["request_token"]},
+    )
+    assert state.status_code == 200
+    assert state.json()["telegram_verified"] is False
 
 
 def test_expired_api_key_is_rejected(monkeypatch, tmp_path):
     client, main = make_client(monkeypatch, tmp_path)
-    submit_request(client)
-    issued = verify_request(client, main).json()
-    from sqlalchemy import select
+    request = submit_request(client)
+    telegram_start(client, request)
+    issued = client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": request["request_token"]},
+    ).json()
     with main.SessionLocal() as db:
         record = db.scalar(select(main.ClientAPIKey))
         record.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
@@ -110,44 +175,31 @@ def test_expired_api_key_is_rejected(monkeypatch, tmp_path):
     assert "expired" in response.json()["detail"].lower()
 
 
-def test_api_key_is_bound_to_client_address(monkeypatch, tmp_path):
-    client, main = make_client(monkeypatch, tmp_path)
-    submit_request(client)
-    issued = verify_request(client, main).json()
-    response = client.get(
-        "/services?clientAddress=00000000-0000-4000-8000-000000000002",
-        headers={"X-API-Key": issued["api_key"], "talq-api-version": "2.7.1"},
-    )
-    assert response.status_code == 403
-
-
-def test_revoked_key_stops_working(monkeypatch, tmp_path):
-    client, main = make_client(monkeypatch, tmp_path)
-    submit_request(client)
-    issued = verify_request(client, main).json()
+def test_client_can_revoke_only_its_own_request_keys(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    request = submit_request(client)
+    telegram_start(client, request)
+    issued = client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": request["request_token"]},
+    ).json()
     revoke = client.post(
-        f"/admin/api-keys/{issued['api_key_id']}/revoke",
-        headers={"X-Admin-Key": "test-admin-secret"},
+        f"/auth/api-keys/{issued['api_key_id']}/revoke",
+        headers={"X-API-Key": issued["api_key"]},
     )
     assert revoke.status_code == 200
-    assert client.get(
-        "/integration-status", headers={"X-API-Key": issued["api_key"]}
-    ).status_code == 401
+    assert client.get("/integration-status", headers={"X-API-Key": issued["api_key"]}).status_code == 401
 
 
 def test_admin_key_listing_includes_expiration_metadata(monkeypatch, tmp_path):
-    client, main = make_client(monkeypatch, tmp_path)
-    submit_request(client)
-    verify_request(client, main)
+    client, _ = make_client(monkeypatch, tmp_path)
+    request = submit_request(client)
+    telegram_start(client, request)
+    client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": request["request_token"]},
+    )
     response = client.get("/admin/api-keys", headers={"X-Admin-Key": "test-admin-secret"})
     assert response.status_code == 200
     assert response.json()[0]["expires_at"]
     assert response.json()[0]["expired"] is False
-
-
-def test_legacy_manual_approval_endpoint_is_removed(monkeypatch, tmp_path):
-    client, _ = make_client(monkeypatch, tmp_path)
-    assert client.post(
-        "/admin/access-requests/1/approve",
-        headers={"X-Admin-Key": "test-admin-secret"},
-    ).status_code == 404

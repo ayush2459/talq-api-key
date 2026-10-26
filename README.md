@@ -103,10 +103,12 @@ Open [Swagger UI](http://127.0.0.1:8000/docs) or the [health endpoint](http://12
 The repository includes a Dockerfile and Render Blueprint. For approval and API-key records to survive restarts and deployments, configure a **persistent PostgreSQL database**:
 
 1. Create a PostgreSQL database in Render (or use an existing managed PostgreSQL database).
-2. Copy its private/internal connection URL into the web service's `DATABASE_URL` environment variable when the database and web service are in the same Render region.
-3. Deploy the Blueprint and confirm `ADMIN_API_KEY` has a strong generated value. Keep it private.
-4. Keep `DEMO_MODE=true` until real FlowSense integration is complete.
-5. Test the health endpoint and submit a sample access request.
+2. Back up any existing database before applying schema changes.
+3. Apply `migrations/001_email_verification_and_key_expiration.postgresql.sql`, then `migrations/002_telegram_verification.postgresql.sql`, to the existing database before deploying code that expects those columns.
+4. Copy the private/internal connection URL into the web service's `DATABASE_URL` environment variable when the database and web service are in the same Render region.
+5. Configure `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_WEBHOOK_SECRET`, and the exact `FRONTEND_ORIGINS` value in Render's environment settings. Keep secrets private.
+6. Confirm `ADMIN_API_KEY` is strong and keep `DEMO_MODE=true` until real FlowSense integration is complete.
+7. Only after CI passes and a manual Telegram end-to-end test succeeds should the branch be considered deployable.
 
 Do not rely on the default SQLite file for a cloud deployment: local files on ephemeral hosting may be lost during redeploys or restarts. Never commit database credentials or admin secrets to GitHub.
 

@@ -137,6 +137,43 @@
     return body;
   }
   const STORAGE_KEY = "flowsense.talq.key-metadata.v1";
+  const MANAGER_TOKEN_KEY = "flowsense.talq.manager-token.v1";
+  let managerToken = localStorage.getItem(MANAGER_TOKEN_KEY) || "";
+  async function refreshManagedKeys(){
+    if(!managerToken)return;
+    try{
+      const rows=await apiFetch("/auth/managed-api-keys",{headers:{"X-Key-Management-Token":managerToken}});
+      const byId=new Map(keys.map(k=>[String(k.id),k]));
+      keys=rows.map(row=>{
+        const old=byId.get(String(row.id))||{};
+        const revoked=Boolean(row.revoked),expired=Boolean(row.expired);
+        return {...old,id:row.id,name:row.label,organization:row.organization,clientAddress:row.client_address,
+          prefix:row.key_prefix,createdAt:row.created_at?new Date(row.created_at):new Date(),
+          expiresAt:row.expires_at?new Date(row.expires_at):null,
+          status:revoked?"Revoked":expired?"Expired":"Active",apiKey:old.apiKey||null,mode:"Live backend"};
+      });
+      persistKeys();render();
+    }catch(error){
+      if(/management credential/i.test(error.message)){localStorage.removeItem(MANAGER_TOKEN_KEY);managerToken="";}
+      console.warn("Could not refresh backend key metadata:",error.message);
+    }
+  }
+  function connectManagerToken(){
+    modal('<div class="modal-head"><div><h2>Connect key manager</h2><p>Use your management token to load your keys on this device.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="field full"><label for="managerTokenInput">Management token</label><input id="managerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_…"><div class="hint">This credential can list and revoke keys in its access-request scope. Keep it private.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManager">Cancel</button><div class="right"><button class="btn btn-primary" id="saveManager">Connect</button></div></div></div>');
+    $("closeModal").onclick=closeModal;$("cancelManager").onclick=closeModal;
+    $("saveManager").onclick=async()=>{
+      const value=$("managerTokenInput").value.trim();if(!value){toast("Enter your management token.");return;}
+      const b=$("saveManager");b.disabled=true;b.textContent="Connecting…";
+      try{
+        const rows=await apiFetch("/auth/managed-api-keys",{headers:{"X-Key-Management-Token":value}});
+        managerToken=value;localStorage.setItem(MANAGER_TOKEN_KEY,value);
+        const byId=new Map(keys.map(k=>[String(k.id),k]));
+        keys=rows.map(row=>{const old=byId.get(String(row.id))||{};return {...old,id:row.id,name:row.label,organization:row.organization,clientAddress:row.client_address,prefix:row.key_prefix,createdAt:row.created_at?new Date(row.created_at):new Date(),expiresAt:row.expires_at?new Date(row.expires_at):null,status:row.revoked?"Revoked":row.expired?"Expired":"Active",apiKey:old.apiKey||null,mode:"Live backend"};});
+        persistKeys();closeModal();render();toast("Backend key metadata connected.");
+      }catch(error){toast(error.message);b.disabled=false;b.textContent="Connect";}
+    };
+  }
+
   function loadSavedKeys(){
     try{
       const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
@@ -167,6 +204,10 @@
   const isActive = (k)=>k.status==="Active" && (!k.expiresAt || k.expiresAt>now());
   function toast(message){$("toastRoot").innerHTML='<div class="toast">'+esc(message)+'</div>';setTimeout(()=>$("toastRoot").innerHTML="",3000)}
   function render(){
+    const toolbar=document.querySelector(".top-actions")||document.querySelector(".topbar-actions");
+    if(toolbar&&!document.getElementById("connectManagerBtn")){
+      const b=document.createElement("button");b.id="connectManagerBtn";b.className="btn btn-secondary";b.textContent="Connect key manager";b.style.marginRight="8px";b.onclick=connectManagerToken;toolbar.prepend(b);
+    }
     const active=keys.filter(isActive).length;
     const expiring=keys.filter(k=>isActive(k)&&k.expiresAt&&k.expiresAt-now()<30*86400000).length;
     $("totalStat").textContent=keys.length;$("activeStat").textContent=active;$("expiringStat").textContent=expiring;
@@ -273,22 +314,27 @@
         telegram:formData.telegram,mode:"Live backend"
       };
       keys=[k,...keys.filter(existing=>String(existing.id)!==String(k.id))];
+      if(result.management_token){
+        managerToken=result.management_token;
+        localStorage.setItem(MANAGER_TOKEN_KEY,managerToken);
+      }
       persistKeys();
-      renderSecret(k,result.api_key);
+      renderSecret(k,result.api_key,result.management_token);
     }catch(error){
       toast(error.message);button.disabled=false;button.textContent="Retry API key issuance";
     }
   }
-  function renderSecret(k,secret){
-    modal('<div class="modal-head"><div><h2>API key generated</h2><p>Issued by the FlowSense backend after Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="verify-card"><div class="success-mark">✓</div><h3>Your API key is ready</h3><p>This is a real backend credential. Copy it now; the backend stores only its hash and will not reveal it again.</p></div><div class="notice warn"><span class="notice-icon">⚠</span><div><strong>One-time display</strong><br>Copy this key now and store it in a secure secret manager. It cannot be retrieved again from the backend.</div></div><div class="key-secret"><code id="secretText">'+esc(secret)+'</code><button class="btn btn-secondary" id="copySecret">Copy</button></div><div class="metadata"><span>Organization</span><span>'+esc(k.organization)+'</span><span>Client UUID</span><span>'+esc(k.clientAddress)+'</span><span>Expires</span><span>'+(k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</span><span>Telegram</span><span>'+esc(formData.telegram)+'</span><span>Mode</span><span>Live backend credential</span></div><div class="modal-actions"><button class="btn btn-secondary" id="closeWithoutSave">Close</button><div class="right"><button class="btn btn-primary" id="finishDemo">Finish</button></div></div></div>',true);
+  function renderSecret(k,secret,managementToken){
+    modal('<div class="modal-head"><div><h2>API key generated</h2><p>Issued by the FlowSense backend after Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="verify-card"><div class="success-mark">✓</div><h3>Your API key is ready</h3><p>This is a real backend credential. Copy it now; the backend stores only its hash and will not reveal it again.</p></div><div class="notice warn"><span class="notice-icon">⚠</span><div><strong>One-time display</strong><br>Copy this key now and store it in a secure secret manager. It cannot be retrieved again from the backend.</div></div>'+(managementToken?'<div class="notice"><div><strong>Key management token</strong><br>Save this separately. It lets you list and revoke keys in this request scope from another device. The server stores only its hash.</div></div><div class="key-secret"><code id="managerSecretText">'+esc(managementToken)+'</code><button class="btn btn-secondary" id="copyManagerSecret">Copy manager token</button></div>':'')+'<div class="key-secret"><code id="secretText">'+esc(secret)+'</code><button class="btn btn-secondary" id="copySecret">Copy</button></div><div class="metadata"><span>Organization</span><span>'+esc(k.organization)+'</span><span>Client UUID</span><span>'+esc(k.clientAddress)+'</span><span>Expires</span><span>'+(k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</span><span>Telegram</span><span>'+esc(formData.telegram)+'</span><span>Mode</span><span>Live backend credential</span></div><div class="modal-actions"><button class="btn btn-secondary" id="closeWithoutSave">Close</button><div class="right"><button class="btn btn-primary" id="finishDemo">Finish</button></div></div></div>',true);
     $("closeModal").onclick=closeModal;$("closeWithoutSave").onclick=closeModal;
     $("copySecret").onclick=async()=>{try{await navigator.clipboard.writeText(secret);toast("API key copied. Store it securely and never commit it to source control.")}catch{toast("Clipboard unavailable — select and copy the key manually.")}};
+    if(managementToken&&$("copyManagerSecret"))$("copyManagerSecret").onclick=async()=>{try{await navigator.clipboard.writeText(managementToken);toast("Management token copied. Keep it private.")}catch{toast("Clipboard unavailable — select and copy the management token manually.")}};
     $("finishDemo").onclick=()=>{persistKeys();currentSecret=null;closeModal();render();toast("Key details saved in this browser. The full secret is not stored.")};
   }
   function confirmRevoke(id){
     const k=keys.find(x=>x.id===id);if(!k)return;
     modal('<div class="modal-head"><div><h2>Revoke API key?</h2><p>This action cannot be undone in the production workflow.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><p class="confirm-text">You are about to revoke <span class="danger-name">'+esc(k.name)+'</span>. The backend will immediately reject requests made with this key. Revocation is permanent.</p><div class="modal-actions"><button class="btn btn-secondary" id="cancelRevoke">Cancel</button><div class="right"><button class="btn btn-danger" id="confirmRevoke">Revoke key</button></div></div></div>');
-    $("closeModal").onclick=closeModal;$("cancelRevoke").onclick=closeModal;$("confirmRevoke").onclick=async()=>{const b=$("confirmRevoke");b.disabled=true;b.textContent="Revoking…";try{await apiFetch("/auth/api-keys/"+encodeURIComponent(k.id)+"/revoke",{method:"POST",headers:{"X-API-Key":k.apiKey}});k.status="Revoked";persistKeys();closeModal();render();toast("API key revoked by the backend.")}catch(error){toast(error.message);b.disabled=false;b.textContent="Retry revoke"}};
+    $("closeModal").onclick=closeModal;$("cancelRevoke").onclick=closeModal;$("confirmRevoke").onclick=async()=>{const b=$("confirmRevoke");b.disabled=true;b.textContent="Revoking…";try{await apiFetch("/auth/managed-api-keys/"+encodeURIComponent(k.id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});k.status="Revoked";persistKeys();closeModal();render();toast("API key revoked by the backend.")}catch(error){toast(error.message);b.disabled=false;b.textContent="Retry revoke"}};
   }
   const docsPage=$("docsPage");
   const consoleContent=document.querySelector(".content");

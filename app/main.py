@@ -279,7 +279,13 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db), secr
     text = (message.get("text") or "").strip()
     chat_id = chat.get("id")
     parts = text.split(maxsplit=1)
-    if not chat_id or not parts or parts[0].split("@")[0] != "/start" or len(parts) != 2:
+    if not chat_id or not parts or parts[0].split("@")[0] != "/start":
+        return {"ok": True}
+    if len(parts) != 2:
+        try:
+            send_telegram_message(str(chat_id), "Welcome to FlowSense Gateway. To verify your account, open the unique verification link from your access request.")
+        except Exception as exc:
+            print(f"Telegram reply failed: {type(exc).__name__}: {exc}", flush=True)
         return {"ok": True}
     token = parts[1].strip()
     item = db.scalar(select(AccessRequest).where(
@@ -289,8 +295,8 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db), secr
     if item is None:
         try:
             send_telegram_message(str(chat_id), "This verification link is invalid or has already been used. Return to the FlowSense console and request a new link.")
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Telegram reply failed: {type(exc).__name__}: {exc}", flush=True)
         return {"ok": True}
     expires = _utc(item.verification_expires_at)
     now = datetime.now(timezone.utc)
@@ -300,15 +306,15 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db), secr
         db.commit()
         try:
             send_telegram_message(str(chat_id), "This verification link has expired. Return to the FlowSense console and submit a new request.")
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Telegram reply failed: {type(exc).__name__}: {exc}", flush=True)
         return {"ok": True}
     sender_username = str(sender.get("username") or "").lstrip("@").lower()
     if not sender_username or not item.telegram_username or not secrets.compare_digest(sender_username, item.telegram_username):
         try:
             send_telegram_message(str(chat_id), "The Telegram username does not match the username supplied in the access request. Return to the console and check the username.")
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Telegram reply failed: {type(exc).__name__}: {exc}", flush=True)
         return {"ok": True}
     item.telegram_chat_id = str(chat_id)
     item.telegram_verified_at = now

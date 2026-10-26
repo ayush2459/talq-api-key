@@ -134,11 +134,11 @@ def test_invalid_request_token_cannot_read_status_or_issue_key(monkeypatch, tmp_
     request = submit_request(client)
     assert client.get(
         f"/access-requests/{request['request_id']}/status",
-        headers={"X-Request-Token": "wrong-token"},
+        headers={"X-Request-Token": "wrong-token-that-is-long-enough-for-schema-validation-123456"},
     ).status_code == 404
     assert client.post(
         f"/access-requests/{request['request_id']}/issue-key",
-        json={"request_token": "wrong-token"},
+        json={"request_token": "wrong-token-that-is-long-enough-for-schema-validation-123456"},
     ).status_code == 404
 
 

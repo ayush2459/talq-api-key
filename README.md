@@ -46,7 +46,16 @@ The raw client API key and request token must never be logged or stored in brows
 - `GET /services/{serviceName}`
 - `GET /data-packages`
 
-Gateway routes also require the `talq-api-version: 2.7.1` header and `clientAddress` query parameter. The requested client address must match the one associated with the issued key. These are pilot routes and response payloads, not proof of complete TALQ 2.7.1 conformance.\n\n### Live FlowSense data routes (requires `X-API-Key` + TALQ headers)\n- `GET /data/facilities?limit=100` — facilities metadata.\n- `GET /data/devices?facility_code=FS-FAC-001&limit=100` — IoT devices with facility metadata.\n- `GET /data/energy?facility_code=FS-FAC-001&hours=24&limit=500` — main energy meter readings.\n- `GET /data/water?facility_code=FS-FAC-001&hours=24&limit=500` — main water meter readings and water-related sensor readings.\n- `GET /data/alerts?facility_code=FS-FAC-001&status=active&limit=100` — alerts with related anomaly metadata.\n\nAll routes are read-only. `facility_code` is optional because the selected policy allows every approved API key to read all facilities; clients can still filter their results. Results are bounded by default and maximum limits to avoid unbounded scans. `FLOW_SENSE_DATABASE_URL` must point to the FlowSense PostgreSQL database using a dedicated read-only database role. It is separate from `DATABASE_URL`, which stores gateway access requests and API-key hashes.
+Gateway routes also require the `talq-api-version: 2.7.1` header and `clientAddress` query parameter. The requested client address must match the one associated with the issued key. These are pilot routes and response payloads, not proof of complete TALQ 2.7.1 conformance.
+
+### Live FlowSense data routes (requires `X-API-Key` + TALQ headers)
+- `GET /data/facilities?limit=100` — facilities metadata.
+- `GET /data/devices?facility_code=FS-FAC-001&limit=100` — IoT devices with facility metadata.
+- `GET /data/energy?facility_code=FS-FAC-001&hours=24&limit=500` — main energy meter readings.
+- `GET /data/water?facility_code=FS-FAC-001&hours=24&limit=500` — main water meter readings and water-related sensor readings.
+- `GET /data/alerts?facility_code=FS-FAC-001&status=active&limit=100` — alerts with related anomaly metadata.
+
+All routes are read-only. `facility_code` is optional because the selected policy allows every approved API key to read all facilities; clients can still filter their results. Results are bounded by default and maximum limits to avoid unbounded scans. `FLOW_SENSE_DATABASE_URL` must point to the FlowSense PostgreSQL database using a dedicated read-only database role. It is separate from `DATABASE_URL`, which stores gateway access requests and API-key hashes.
 
 ## Local setup (Windows PowerShell)
 
@@ -179,7 +188,8 @@ Open the returned `telegram_url`, press Start with the matching Telegram account
 - [x] Email-verification-based automatic API key issuance, 90-day default expiration, and revocation workflow.
 - [x] Store issued API keys as hashes.
 - [ ] Add rate limiting, Telegram webhook monitoring, rate limiting, audit events, and richer admin identity management.
-- [x] Add read-only FlowSense PostgreSQL endpoints for facilities, devices, energy, water, and alerts.\n- [ ] Map live database records into complete official TALQ models.
+- [x] Add read-only FlowSense PostgreSQL endpoints for facilities, devices, energy, water, and alerts.
+- [ ] Map live database records into complete official TALQ models.
 - [ ] Validate the required operations and payloads against the official specification.
 - [ ] Run integration tests with the target CMS and review production security.
 

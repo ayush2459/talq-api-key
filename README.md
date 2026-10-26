@@ -134,19 +134,22 @@ The webhook must be configured only after the service is publicly reachable over
 
 ## Example access workflow
 
-Submit a request in Swagger UI using `POST /access-requests`:
+Use the browser console or submit a request directly:
 
-```json
-{
-  "contact_name": "Example Contact",
-  "email": "integration@example.com",
-  "organization": "Example Organization",
-  "purpose": "Integrate our CMS with FlowSense gateway data for a pilot.",
-  "client_address": "00000000-0000-4000-8000-000000000001"
-}
+```powershell
+$body = @{
+  contact_name = "Example Contact"
+  email = "integration@example.com"
+  organization = "Example Organization"
+  telegram_username = "@example_user"
+  purpose = "Integrate our CMS with FlowSense gateway data for a pilot."
+  client_address = "00000000-0000-4000-8000-000000000001"
+} | ConvertTo-Json
+$request = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/access-requests" -ContentType "application/json" -Body $body
+$request
 ```
 
-The gateway emails a one-time verification token. Submit it to `POST /verify-email` as JSON containing the token. The response contains the new key once and its `expires_at` timestamp. Use it in `X-API-Key` and include the exact approved CMS UUID as `clientAddress`.
+Open the returned `telegram_url`, press Start with the matching Telegram account, and then check the request status using `X-Request-Token`. After `telegram_verified` is true, submit `POST /access-requests/{request_id}/issue-key` with JSON body `{"request_token":"<request_token>"}`. The raw API key is returned once. Use the real stable CMS UUID for `client_address`.
 
 ## Security notes and production work
 
@@ -156,7 +159,7 @@ The gateway emails a one-time verification token. Submit it to `POST /verify-ema
 - `API_KEY_LIFETIME_DAYS` defaults to 90 (allowed: 1–3650); `EMAIL_VERIFICATION_MINUTES` defaults to 30 (allowed: 5–1440).
 - Apply `migrations/001_email_verification_and_key_expiration.postgresql.sql` to an existing PostgreSQL database before deploying. Back up first. Existing keys receive a 90-day lifetime from their original creation time.
 - Revoke a key if it is exposed or no longer needed.
-- The public request endpoint should be protected with rate limiting, abuse monitoring, and optionally CAPTCHA/email verification before broad public release.
+- The public request endpoint should be protected with rate limiting and abuse monitoring before broad public release.
 - Use HTTPS, rotate credentials, review logs, and implement suitable client authentication and access controls.
 - Validate all relevant request/response schemas and security requirements against the official TALQ specification and the intended CMS.
 - The current admin key is a shared administrative secret, not a full user-management or identity-provider system.

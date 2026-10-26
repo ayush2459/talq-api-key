@@ -7,14 +7,15 @@ import hmac
 import os
 import re
 import secrets
-import smtplib
-import ssl
-from email.message import EmailMessage
+import json
+from urllib.error import URLError, HTTPError
+from urllib.request import Request, urlopen
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select
@@ -25,14 +26,12 @@ ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
 EXPECTED_CLIENT_ADDRESS = os.getenv("TALQ_CLIENT_ADDRESS", "").strip()
 DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
 API_KEY_LIFETIME_DAYS = max(1, min(int(os.getenv("API_KEY_LIFETIME_DAYS", "90")), 3650))
-EMAIL_VERIFICATION_MINUTES = max(5, min(int(os.getenv("EMAIL_VERIFICATION_MINUTES", "30")), 1440))
+TELEGRAM_VERIFICATION_MINUTES = max(5, min(int(os.getenv("TELEGRAM_VERIFICATION_MINUTES", "30")), 1440))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://flowsense-talq-gateway.onrender.com").rstrip("/")
-SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "").strip()
-SMTP_USE_STARTTLS = os.getenv("SMTP_USE_STARTTLS", "true").lower() == "true"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
+FRONTEND_ORIGINS = [origin.strip().rstrip("/") for origin in os.getenv("FRONTEND_ORIGINS", "http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:8000").split(",") if origin.strip()]
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./flowsense_talq.db").strip()
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
@@ -63,7 +62,11 @@ class AccessRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     verification_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     verification_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # legacy column retained for migration compatibility
+    telegram_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    telegram_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    request_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
 
 class ClientAPIKey(Base):
@@ -85,11 +88,15 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="FlowSense TALQ Gateway",
-    version="0.2.0",
-    description=(
-        "Pilot gateway with approval-based API key issuance. This is not a complete "
-        "or TALQ-certified implementation."
-    ),
+    version="0.3.0",
+    description="FlowSense TALQ Gateway pilot with Telegram-verified API key issuance; not a complete or TALQ-certified implementation.",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=FRONTEND_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "X-Admin-Key", "X-Request-Token", "X-Telegram-Bot-Api-Secret-Token", "talq-api-version"],
 )
 
 # Deliberately empty until real FlowSense device data is mapped and validated.
@@ -151,6 +158,7 @@ class AccessRequestInput(BaseModel):
     contact_name: str = Field(min_length=2, max_length=120)
     email: str = Field(min_length=5, max_length=254)
     organization: str = Field(min_length=2, max_length=160)
+    telegram_username: str = Field(min_length=3, max_length=32, pattern=r"^@?[A-Za-z][A-Za-z0-9_]{4,31}$")
     purpose: str = Field(min_length=10, max_length=2000)
     client_address: UUID = Field(description="Stable UUID address assigned to the partner CMS")
 
@@ -164,31 +172,25 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "FlowSense TALQ Gateway", "environment": APP_ENV}
 
 
-def send_verification_email(recipient: str, organization: str, token: str) -> None:
-    """Deliver the one-time verification token. No token is logged or persisted in plaintext."""
-    if not all([SMTP_HOST, SMTP_FROM_EMAIL]):
-        raise RuntimeError("Email delivery is not configured. Set SMTP_HOST and SMTP_FROM_EMAIL.")
-    message = EmailMessage()
-    message["Subject"] = "Verify your FlowSense TALQ Gateway API access"
-    message["From"] = SMTP_FROM_EMAIL
-    message["To"] = recipient
-    message.set_content(
-        f"Hello {organization},\n\n"
-        "A request was made for a FlowSense TALQ Gateway API key using this email address.\n"
-        f"The verification token expires in {EMAIL_VERIFICATION_MINUTES} minutes.\n\n"
-        "To verify and automatically receive your API key, send a POST request to "
-        f"{PUBLIC_BASE_URL}/verify-email with JSON body:\n\n"
-        f'{{"token": "{token}"}}\n\n'
-        "The response contains your API key once. Store it securely. Do not share this "
-        "token or key. If you did not request access, ignore this message.\n"
-    )
-    context = ssl.create_default_context()
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-        if SMTP_USE_STARTTLS:
-            server.starttls(context=context)
-        if SMTP_USERNAME:
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-        server.send_message(message)
+def telegram_api(method: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Call Telegram Bot API without logging bot tokens or verification links."""
+    if not TELEGRAM_BOT_TOKEN:
+        raise RuntimeError("Telegram bot is not configured.")
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}"
+    body = json.dumps(payload).encode("utf-8")
+    request = Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urlopen(request, timeout=12) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except (URLError, HTTPError, TimeoutError, ValueError) as exc:
+        raise RuntimeError("Telegram Bot API request failed.") from exc
+    if not result.get("ok"):
+        raise RuntimeError("Telegram Bot API rejected the request.")
+    return result.get("result", {})
+
+
+def send_telegram_message(chat_id: str, text: str) -> None:
+    telegram_api("sendMessage", {"chat_id": chat_id, "text": text})
 
 
 def _utc(value: datetime | None) -> datetime | None:
@@ -211,97 +213,144 @@ def _new_client_key(item: AccessRequest, db: Session) -> tuple[ClientAPIKey, str
         created_at=now,
         expires_at=now + timedelta(days=API_KEY_LIFETIME_DAYS),
     )
-    item.status = "verified"
-    item.email_verified_at = now
+    item.status = "key_issued"
     item.verification_token_hash = None
     item.verification_expires_at = None
+    item.request_token_hash = None
     db.add(record)
     return record, raw_key
 
 
+class RequestTokenInput(BaseModel):
+    request_token: str = Field(min_length=32, max_length=128)
+
+
 @app.post("/access-requests", status_code=201, tags=["Access management"])
 def request_access(payload: AccessRequestInput, db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Create a request and email a one-time verification token; no admin approval is needed."""
+    """Create a request and return a one-time Telegram deep link; no key is issued yet."""
     if not validate_email(payload.email):
         raise HTTPException(status_code=422, detail="Enter a valid email address")
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_BOT_USERNAME or not TELEGRAM_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Telegram verification is not configured. Please try again later.")
     email = payload.email.strip().lower()
+    telegram_username = payload.telegram_username.strip().lstrip("@").lower()
     now = datetime.now(timezone.utc)
-    token = secrets.token_urlsafe(32)
-    token_hash = hash_api_key(token)
-    item = db.scalar(
-        select(AccessRequest).where(
-            AccessRequest.email == email,
-            AccessRequest.client_address == str(payload.client_address),
-            AccessRequest.status == "pending_verification",
-        )
-    )
+    verification_token = secrets.token_urlsafe(32)
+    request_token = secrets.token_urlsafe(32)
+    item = db.scalar(select(AccessRequest).where(
+        AccessRequest.email == email,
+        AccessRequest.client_address == str(payload.client_address),
+        AccessRequest.status == "pending_verification",
+    ))
     if item is None:
         item = AccessRequest(
-            contact_name=payload.contact_name.strip(),
-            email=email,
-            organization=payload.organization.strip(),
-            purpose=payload.purpose.strip(),
-            client_address=str(payload.client_address),
-            status="pending_verification",
+            contact_name=payload.contact_name.strip(), email=email,
+            organization=payload.organization.strip(), purpose=payload.purpose.strip(),
+            client_address=str(payload.client_address), status="pending_verification",
         )
         db.add(item)
-    item.verification_token_hash = token_hash
-    item.verification_expires_at = now + timedelta(minutes=EMAIL_VERIFICATION_MINUTES)
-    try:
-        send_verification_email(email, item.organization, token)
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=503,
-            detail="Verification email could not be sent. Please try again later.",
-        ) from exc
+    item.telegram_username = telegram_username
+    item.telegram_chat_id = None
+    item.telegram_verified_at = None
+    item.verification_token_hash = hash_api_key(verification_token)
+    item.verification_expires_at = now + timedelta(minutes=TELEGRAM_VERIFICATION_MINUTES)
+    item.request_token_hash = hash_api_key(request_token)
     db.commit()
     db.refresh(item)
     return {
         "request_id": item.id,
-        "status": "pending_verification",
+        "status": item.status,
+        "request_token": request_token,
+        "telegram_url": f"https://t.me/{TELEGRAM_BOT_USERNAME}?start={verification_token}",
         "verification_expires_at": item.verification_expires_at.isoformat(),
-        "message": "Check your email and submit the verification token to /verify-email. A key is issued automatically after verification.",
+        "message": "Open the Telegram link and press Start. Return here and check verification status; the API key is issued only after verification.",
     }
 
 
-class EmailVerificationInput(BaseModel):
-    token: str = Field(min_length=20, max_length=256)
-
-
-@app.post("/verify-email", tags=["Access management"])
-def verify_email_and_issue_key(
-    payload: EmailVerificationInput,
-    db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    """Verify email possession and issue a time-limited client key exactly once."""
-    token_hash = hash_api_key(payload.token)
-    item = db.scalar(
-        select(AccessRequest).where(
-            AccessRequest.verification_token_hash == token_hash,
-            AccessRequest.status == "pending_verification",
-        )
-    )
+@app.post("/telegram/webhook", include_in_schema=False)
+def telegram_webhook(request: Request, db: Session = Depends(get_db), secret: str | None = Header(default=None, alias="X-Telegram-Bot-Api-Secret-Token")) -> dict[str, bool]:
+    """Accept Telegram webhook updates and bind a request to the real Telegram sender."""
+    if not TELEGRAM_WEBHOOK_SECRET or not secret or not secrets.compare_digest(secret, TELEGRAM_WEBHOOK_SECRET):
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    update = request.scope.get("_telegram_update")
+    if update is None:
+        update = getattr(request.state, "telegram_update", None)
+    if update is None:
+        # Read JSON from the request once; FastAPI Request is safe to consume here.
+        import asyncio
+        update = asyncio.run(request.json())
+    message = update.get("message") or {}
+    sender = message.get("from") or {}
+    chat = message.get("chat") or {}
+    text = (message.get("text") or "").strip()
+    chat_id = chat.get("id")
+    parts = text.split(maxsplit=1)
+    if not chat_id or not parts or parts[0].split("@")[0] != "/start" or len(parts) != 2:
+        return {"ok": True}
+    token = parts[1].strip()
+    item = db.scalar(select(AccessRequest).where(
+        AccessRequest.verification_token_hash == hash_api_key(token),
+        AccessRequest.status == "pending_verification",
+    ))
     if item is None:
-        raise HTTPException(status_code=400, detail="Invalid, expired, or already-used verification token")
+        try:
+            send_telegram_message(str(chat_id), "This verification link is invalid or has already been used. Return to the FlowSense console and request a new link.")
+        except Exception:
+            pass
+        return {"ok": True}
     expires = _utc(item.verification_expires_at)
     now = datetime.now(timezone.utc)
     if expires is None or expires <= now:
         item.verification_token_hash = None
         item.verification_expires_at = None
         db.commit()
-        raise HTTPException(status_code=400, detail="Invalid, expired, or already-used verification token")
+        try:
+            send_telegram_message(str(chat_id), "This verification link has expired. Return to the FlowSense console and submit a new request.")
+        except Exception:
+            pass
+        return {"ok": True}
+    sender_username = str(sender.get("username") or "").lstrip("@").lower()
+    if not sender_username or not item.telegram_username or not secrets.compare_digest(sender_username, item.telegram_username):
+        try:
+            send_telegram_message(str(chat_id), "The Telegram username does not match the username supplied in the access request. Return to the console and check the username.")
+        except Exception:
+            pass
+        return {"ok": True}
+    item.telegram_chat_id = str(chat_id)
+    item.telegram_verified_at = now
+    item.verification_token_hash = None
+    item.verification_expires_at = None
+    item.status = "verified"
+    db.commit()
+    try:
+        send_telegram_message(str(chat_id), "Your FlowSense TALQ Gateway Telegram account is verified. Return to the browser to issue your API key. Keep the key private.")
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@app.get("/access-requests/{request_id}/status", tags=["Access management"])
+def access_request_status(request_id: int, payload: RequestTokenInput = Depends(), db: Session = Depends(get_db), x_request_token: str | None = Header(default=None, alias="X-Request-Token")) -> dict[str, Any]:
+    item = db.get(AccessRequest, request_id)
+    if item is None or not x_request_token or not item.request_token_hash or not secrets.compare_digest(hash_api_key(x_request_token), item.request_token_hash):
+        raise HTTPException(status_code=404, detail="Access request not found")
+    return {"request_id": item.id, "status": item.status, "telegram_verified": item.telegram_verified_at is not None, "expires_at": item.verification_expires_at.isoformat() if item.verification_expires_at else None}
+
+
+@app.post("/access-requests/{request_id}/issue-key", tags=["Access management"])
+def issue_key_after_telegram_verification(request_id: int, payload: RequestTokenInput, db: Session = Depends(get_db)) -> dict[str, Any]:
+    item = db.get(AccessRequest, request_id)
+    if item is None or not item.request_token_hash or not secrets.compare_digest(hash_api_key(payload.request_token), item.request_token_hash):
+        raise HTTPException(status_code=404, detail="Access request not found")
+    if item.status != "verified" or item.telegram_verified_at is None:
+        raise HTTPException(status_code=409, detail="Telegram verification is not complete")
     record, raw_key = _new_client_key(item, db)
     db.commit()
     db.refresh(record)
     return {
-        "status": "verified",
-        "authenticated": False,
-        "api_key_id": record.id,
-        "api_key": raw_key,
-        "client_address": record.client_address,
-        "created_at": record.created_at.isoformat(),
-        "expires_at": record.expires_at.isoformat(),
+        "status": "issued", "authenticated": False, "api_key_id": record.id,
+        "api_key": raw_key, "client_address": record.client_address,
+        "created_at": record.created_at.isoformat(), "expires_at": record.expires_at.isoformat(),
         "lifetime_days": API_KEY_LIFETIME_DAYS,
         "warning": "Copy this key now. It is shown once; only its hash is stored.",
     }
@@ -326,7 +375,8 @@ def list_access_requests(
             "client_address": row.client_address,
             "status": row.status,
             "created_at": row.created_at.isoformat() if row.created_at else None,
-            "email_verified_at": row.email_verified_at.isoformat() if row.email_verified_at else None,
+            "telegram_username": row.telegram_username,
+        "telegram_verified_at": row.telegram_verified_at.isoformat() if row.telegram_verified_at else None,
         }
         for row in rows
     ]

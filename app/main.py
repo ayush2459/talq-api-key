@@ -20,7 +20,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select, update
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from dotenv import load_dotenv
 
+load_dotenv()
 APP_ENV = os.getenv("APP_ENV", "production")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
 EXPECTED_CLIENT_ADDRESS = os.getenv("TALQ_CLIENT_ADDRESS", "").strip()

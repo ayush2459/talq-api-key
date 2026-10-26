@@ -136,7 +136,27 @@
     if (!response.ok) throw new Error(body.detail || "API request failed (" + response.status + ")");
     return body;
   }
-  let keys = [];
+  const STORAGE_KEY = "flowsense.talq.key-metadata.v1";
+  function loadSavedKeys(){
+    try{
+      const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
+      if(!Array.isArray(saved))return [];
+      return saved.map(k=>({...k,createdAt:k.createdAt?new Date(k.createdAt):new Date(),expiresAt:k.expiresAt?new Date(k.expiresAt):null}));
+    }catch{return [];}
+  }
+  function persistKeys(){
+    try{
+      // Persist display metadata only. Never write the raw API secret to browser storage.
+      const safe=keys.map(({id,name,organization,clientAddress,createdAt,expiresAt,status,prefix,telegram,mode})=>({
+        id,name,organization,clientAddress,
+        createdAt:createdAt instanceof Date?createdAt.toISOString():createdAt,
+        expiresAt:expiresAt?(expiresAt instanceof Date?expiresAt.toISOString():expiresAt):null,
+        status,prefix,telegram,mode
+      }));
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(safe));
+    }catch{toast("Could not save key metadata in this browser. Check browser storage settings.");}
+  }
+  let keys = loadSavedKeys();
   let currentSecret = null;
   let modalStep = 1;
   let formData = {};
@@ -159,7 +179,7 @@
     $("tableArea").innerHTML='<div class="table-wrap"><table><thead><tr><th>Key name</th><th>Client address</th><th>Status</th><th>Expiry</th><th>Created</th><th>Actions</th></tr></thead><tbody>'+filtered.map(k=>{
       const activeNow=isActive(k),status=activeNow?'Active':(k.status==="Revoked"?'Revoked':'Expired');
       const cls=status==="Active"?'active-status':status==="Revoked"?'revoked-status':'expired-status';
-      return '<tr><td><div class="key-name">'+esc(k.name)+'</div><div class="key-sub">'+esc(k.organization)+' · '+esc(k.prefix)+'</div></td><td><span class="mono">'+esc(k.clientAddress)+'</span></td><td><span class="status '+cls+'">'+status+'</span></td><td>'+ (k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</td><td>'+esc(fmt(k.createdAt))+'</td><td><button class="btn btn-danger" style="padding:7px 10px;font-size:11px" data-revoke="'+esc(k.id)+'" '+(!activeNow?'disabled':'')+'>Revoke</button></td></tr>';
+      return '<tr><td><div class="key-name">'+esc(k.name)+'</div><div class="key-sub">'+esc(k.organization)+' · '+esc(k.prefix)+'</div></td><td><span class="mono">'+esc(k.clientAddress)+'</span></td><td><span class="status '+cls+'">'+status+'</span></td><td>'+ (k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</td><td>'+esc(fmt(k.createdAt))+'</td><td><button class="btn btn-danger" style="padding:7px 10px;font-size:11px" data-revoke="'+esc(k.id)+'" '+(!activeNow||!k.apiKey?'disabled title="Revoke is available only in the session where the secret was issued"':'')+'>Revoke</button></td></tr>';
     }).join('')+'</tbody></table></div>';
     document.querySelectorAll("[data-revoke]").forEach(b=>b.addEventListener("click",()=>confirmRevoke(b.dataset.revoke)));
   }
@@ -252,6 +272,8 @@
         status:"Active",prefix:result.api_key.slice(0,15)+"…",apiKey:result.api_key,
         telegram:formData.telegram,mode:"Live backend"
       };
+      keys=[k,...keys.filter(existing=>String(existing.id)!==String(k.id))];
+      persistKeys();
       renderSecret(k,result.api_key);
     }catch(error){
       toast(error.message);button.disabled=false;button.textContent="Retry API key issuance";
@@ -261,12 +283,12 @@
     modal('<div class="modal-head"><div><h2>API key generated</h2><p>Issued by the FlowSense backend after Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="verify-card"><div class="success-mark">✓</div><h3>Your API key is ready</h3><p>This is a real backend credential. Copy it now; the backend stores only its hash and will not reveal it again.</p></div><div class="notice warn"><span class="notice-icon">⚠</span><div><strong>One-time display</strong><br>Copy this key now and store it in a secure secret manager. It cannot be retrieved again from the backend.</div></div><div class="key-secret"><code id="secretText">'+esc(secret)+'</code><button class="btn btn-secondary" id="copySecret">Copy</button></div><div class="metadata"><span>Organization</span><span>'+esc(k.organization)+'</span><span>Client UUID</span><span>'+esc(k.clientAddress)+'</span><span>Expires</span><span>'+(k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</span><span>Telegram</span><span>'+esc(formData.telegram)+'</span><span>Mode</span><span>Live backend credential</span></div><div class="modal-actions"><button class="btn btn-secondary" id="closeWithoutSave">Close</button><div class="right"><button class="btn btn-primary" id="finishDemo">Finish</button></div></div></div>',true);
     $("closeModal").onclick=closeModal;$("closeWithoutSave").onclick=closeModal;
     $("copySecret").onclick=async()=>{try{await navigator.clipboard.writeText(secret);toast("API key copied. Store it securely and never commit it to source control.")}catch{toast("Clipboard unavailable — select and copy the key manually.")}};
-    $("finishDemo").onclick=()=>{keys.unshift(k);currentSecret=null;closeModal();render();toast("API key metadata is visible for this browser session only.")};
+    $("finishDemo").onclick=()=>{persistKeys();currentSecret=null;closeModal();render();toast("Key details saved in this browser. The full secret is not stored.")};
   }
   function confirmRevoke(id){
     const k=keys.find(x=>x.id===id);if(!k)return;
     modal('<div class="modal-head"><div><h2>Revoke API key?</h2><p>This action cannot be undone in the production workflow.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><p class="confirm-text">You are about to revoke <span class="danger-name">'+esc(k.name)+'</span>. The backend will immediately reject requests made with this key. Revocation is permanent.</p><div class="modal-actions"><button class="btn btn-secondary" id="cancelRevoke">Cancel</button><div class="right"><button class="btn btn-danger" id="confirmRevoke">Revoke key</button></div></div></div>');
-    $("closeModal").onclick=closeModal;$("cancelRevoke").onclick=closeModal;$("confirmRevoke").onclick=async()=>{const b=$("confirmRevoke");b.disabled=true;b.textContent="Revoking…";try{await apiFetch("/auth/api-keys/"+encodeURIComponent(k.id)+"/revoke",{method:"POST",headers:{"X-API-Key":k.apiKey}});k.status="Revoked";closeModal();render();toast("API key revoked by the backend.")}catch(error){toast(error.message);b.disabled=false;b.textContent="Retry revoke"}};
+    $("closeModal").onclick=closeModal;$("cancelRevoke").onclick=closeModal;$("confirmRevoke").onclick=async()=>{const b=$("confirmRevoke");b.disabled=true;b.textContent="Revoking…";try{await apiFetch("/auth/api-keys/"+encodeURIComponent(k.id)+"/revoke",{method:"POST",headers:{"X-API-Key":k.apiKey}});k.status="Revoked";persistKeys();closeModal();render();toast("API key revoked by the backend.")}catch(error){toast(error.message);b.disabled=false;b.textContent="Retry revoke"}};
   }
   const docsPage=$("docsPage");
   const consoleContent=document.querySelector(".content");

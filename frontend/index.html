@@ -48,74 +48,54 @@
       </section>
       <div class="notice"><span class="notice-icon">ⓘ</span><div><strong>Keep your credentials safe.</strong> Never share an API key publicly or commit it to source control. In the completed application, the backend will store only a hash of each key and enforce expiry and revocation.</div></div>
       <p class="footer-note">FlowSense TALQ Gateway · UI-only prototype · No data is sent to a server or saved between reloads.</p>
-      <section class="docs-page" id="docsPage" aria-label="TALQ protocol documentation">
-        <div class="docs-hero"><div class="eyebrow" style="color:#8bc2ff">Official protocol reference</div><h1>TALQ Smart City Protocol</h1><p>Practical guidance for the published TALQ 2.7.1 OpenAPI specification, Gateway/CMS roles, data model, security, integration, and conformance. Use the versioned official files as the normative source for implementation.</p><div style="margin-top:16px"><span class="docs-pill">Published baseline: TALQ 2.7.1</span></div></div>
-        <div class="docs-warning"><strong>Important — API keys are not the TALQ protocol itself.</strong> TALQ defines interoperable CMS ↔ Gateway APIs and their data contracts. FlowSense portal login, Telegram verification, key issuance, expiry, and revocation are custom gateway access-management features; they do not by themselves prove TALQ conformance. Follow the selected version's exact transport, security, and operation requirements.</div>
-        <nav class="docs-toc" aria-label="Documentation sections"><a href="#docs-overview">Overview</a><a href="#docs-architecture">Architecture</a><a href="#docs-contracts">Official contracts</a><a href="#docs-features">Capabilities</a><a href="#docs-security">Security</a><a href="#docs-client">Client UUIDs & keys</a><a href="#docs-compliance">Conformance</a><a href="#docs-flow">Integration plan</a><a href="#docs-links">Official links</a></nav>
-        <section class="docs-section" id="docs-overview"><h2>1. What TALQ is</h2><div class="docs-grid">
-          <article class="docs-card"><h3>Purpose and scope</h3><p>TALQ is an application-layer Smart City Protocol designed to enable products from different vendors to interoperate. It standardizes communication between Central Management Software (CMS) and Outdoor Device Networks (ODN) through a TALQ Gateway/Bridge.</p><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/specification/" target="_blank" rel="noreferrer">TALQ specification overview ↗</a></article>
-          <article class="docs-card"><h3>Technology</h3><p>TALQ 2 uses RESTful HTTP APIs defined using OpenAPI and structured data payloads. The official files define paths, methods, schemas, required fields, parameters, responses, and operation semantics.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification" target="_blank" rel="noreferrer">Official specification repository ↗</a></article>
-        </div></section>
-        <section class="docs-section" id="docs-architecture"><h2>2. Architecture and roles</h2><div class="docs-card"><div class="docs-code">Central Management Software (CMS)
-       │ HTTPS + REST + TALQ data model
-       ▼
-FlowSense TALQ Gateway / TALQ Bridge
-       │ vendor/device-network adapter
-       ▼
-Outdoor Device Network (ODN)
-       ├─ controllers / actuators
-       ├─ sensors / meters
-       └─ field devices</div><ul>
-          <li><strong>CMS:</strong> supervisory software that discovers, configures, monitors, and controls outdoor networks.</li>
-          <li><strong>Gateway / TALQ Bridge:</strong> exposes the Gateway-side TALQ API and maps protocol requests/data to actual ODN and vendor capabilities.</li>
-          <li><strong>ODN:</strong> field devices and the network connecting them. TALQ does not prescribe every physical connectivity technology or how each smart-city application is built.</li>
-          <li><strong>Separate API contracts:</strong> the official CMS API and Gateway API are distinct. Implement the contract appropriate to the product's role; do not invent protocol endpoints from the dashboard.</li>
-        </ul></div></section>
-        <section class="docs-section" id="docs-contracts"><h2>3. The four official specification components</h2><div class="panel"><div class="table-wrap"><table class="docs-table"><thead><tr><th>Component</th><th>Purpose</th><th>Official 2.7.1 file</th></tr></thead><tbody>
-          <tr><td><strong>Approved specification</strong></td><td>Human-readable protocol rules and implementation guidance.</td><td><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification" target="_blank" rel="noreferrer">Repository / README ↗</a></td></tr>
-          <tr><td><strong>Data model OAS</strong></td><td>Shared entities and schemas: devices, functions, attributes, events, calendars, control programs, etc.</td><td><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-data-model-2-7-1.json" target="_blank" rel="noreferrer">talq-data-model-2-7-1.json ↗</a></td></tr>
-          <tr><td><strong>Gateway API OAS</strong></td><td>Gateway-side resources, operations, parameters, payloads, and responses.</td><td><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-api-gateway-2-7-1.json" target="_blank" rel="noreferrer">talq-api-gateway-2-7-1.json ↗</a></td></tr>
-          <tr><td><strong>CMS API OAS</strong></td><td>CMS-side resources, operations, parameters, payloads, and responses.</td><td><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-api-cms-2-7-1.json" target="_blank" rel="noreferrer">talq-api-cms-2-7-1.json ↗</a></td></tr>
-        </tbody></table></div></div><p class="sub" style="margin-top:10px">The official repository lists version 2.7.1 as released on 16 April 2026. Check that repository again before development to confirm the newest release.</p></section>
-        <section class="docs-section" id="docs-features"><h2>4. Capability areas</h2><div class="docs-grid">
-          <article class="docs-card"><h3>Discovery and configuration</h3><p>Discover devices and declared functions/capabilities, configure supported properties, and keep CMS state aligned with the gateway.</p></article>
-          <article class="docs-card"><h3>Monitoring and data collection</h3><p>Represent device status and attributes, collect periodic or event-driven data, configure logging where supported, and request readings on demand.</p></article>
-          <article class="docs-card"><h3>Control and scheduling</h3><p>Model supported commands, control programs, calendars, schedules, and overrides. Honor asynchronous responses and operation semantics defined by the selected OAS.</p></article>
-          <article class="docs-card"><h3>Events, groups and data packages</h3><p>Support applicable event flows and group management, plus firmware updates or vendor data packages where included in the selected contract and product capabilities.</p></article>
-          <article class="docs-card"><h3>Functions and profiles</h3><p>Devices declare functions and supported profiles. Optional functionality varies; implement mandatory requirements for the relevant profile and accurately report supported capabilities.</p></article>
-          <article class="docs-card"><h3>Smart-city domains</h3><p>The flexible model supports lighting and can extend to environmental sensing, parking, traffic, waste, energy, water, and other domains where corresponding functions/profiles are specified and implemented.</p></article>
-        </div><p class="sub">This is a conceptual summary, not the exact operation inventory. Check the official OAS mandatory/optional annotations for each required profile.</p></section>
-        <section class="docs-section" id="docs-security"><h2>5. Security and transport</h2><div class="docs-card"><ul>
-          <li><strong>HTTPS/TLS:</strong> protect protocol traffic in transit and validate certificates; plan TLS termination and trust boundaries.</li>
-          <li><strong>Authentication/authorization:</strong> document the deployed gateway authentication scheme and ensure it matches applicable TALQ requirements. Do not assume a custom API key is automatically a TALQ-defined security scheme.</li>
-          <li><strong>Least privilege:</strong> restrict access by integration, environment, permitted operations, and network policy.</li>
-          <li><strong>Secret handling:</strong> store a cryptographic hash of issued keys where practical; show the raw key once; never log raw keys, verification codes, or authorization headers.</li>
-          <li><strong>Lifecycle enforcement:</strong> validate expiry and revocation server-side on every request; support rotation, rate limits, and audit trails.</li>
-          <li><strong>Operations:</strong> keep secrets in environment/secret management, redact logs, monitor abuse, and document certificate renewal and incident response.</li>
-        </ul><p>These are engineering recommendations for FlowSense's access layer. Verify normative TALQ-specific security requirements in the official versioned specification before implementation.</p></div></section>
-        <section class="docs-section" id="docs-client"><h2>6. Client address / UUID vs API key</h2><div class="docs-grid">
-          <article class="docs-card"><h3>TALQ clientAddress</h3><p><code>clientAddress</code> has protocol-defined meaning and format. TALQ 2.7.1 release notes specifically mention UUID-format corrections for clientAddress in Gateway and CMS methods. Treat it as a protocol identifier, not a credential or display label.</p></article>
-          <article class="docs-card"><h3>FlowSense API key</h3><p>An API key is a credential for the FlowSense gateway's access layer if the product uses one. It is distinct from clientAddress. A syntactically valid UUID does not register a client or grant authorization.</p></article>
-        </div><div class="docs-code">Illustrative UUID format:
-550e8400-e29b-41d4-a716-446655440000
-
-Use the actual clientAddress assigned/agreed for the CMS integration.
-Do not invent a new UUID for every request.
-Never put an API key in the clientAddress field.
-Follow the gateway's configured auth header and exact TALQ contract.</div></section>
-        <section class="docs-section" id="docs-compliance"><h2>7. What TALQ-compliant means</h2><div class="docs-warning"><strong>This dashboard and current API-key prototype are not TALQ-certified.</strong> A key-issuance workflow, Swagger page, or small set of endpoints is not proof of conformance. TALQ certification is a separate process administered by the Consortium.</div><div class="docs-card"><ol>
-          <li>Pin a specification version, product role, and applicable profile.</li><li>Implement the official OpenAPI contract and shared data model, including mandatory operations/functions, schemas, parameters, status codes, and error behavior.</li><li>Map real FlowSense sensor/meter/device data to TALQ entities; never present demo payloads as live device data.</li><li>Implement real transport security, access controls, request validation, persistence, and operational error handling.</li><li>Test positive, negative, boundary, and interoperability cases against the official definitions and applicable test process.</li><li>Review current certification requirements and submit through the Consortium process if formal certification is required.</li>
-        </ol><p><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/certification/" target="_blank" rel="noreferrer">Official certification process ↗</a> · <a class="docs-link" href="https://www.talq-consortium.org/certified-products.html" target="_blank" rel="noreferrer">Certified products register ↗</a></p></div></section>
-        <section class="docs-section" id="docs-flow"><h2>8. Suggested FlowSense integration sequence</h2><div class="docs-card"><ol>
-          <li><strong>Define the integration:</strong> identify CMS, Gateway/Bridge, ODN, target version/profile, clientAddress, and device inventory source.</li><li><strong>Build the protocol layer:</strong> validate/generate models from official OAS files and implement required Gateway operations.</li><li><strong>Connect the adapter:</strong> map TALQ operations to real FlowSense device/sensor/meter services and translate errors/responses correctly.</li><li><strong>Add portal access management:</strong> implement Telegram verification and key issuance as a separate workflow; bind the authenticated integration to the intended clientAddress.</li><li><strong>Test end-to-end:</strong> authentication, schema validation, discovery, monitoring, supported configuration/control, events, error cases, expiry/revocation, persistence, and restart behavior.</li><li><strong>Stage before production:</strong> run tests, review secrets/logs, apply migrations, configure TLS, and obtain approval before rollout.</li>
-        </ol></div></section>
-        <section class="docs-section" id="docs-links"><h2>9. Official references</h2><div class="docs-card"><ul>
-          <li><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification" target="_blank" rel="noreferrer">TALQ specification repository and version history ↗</a></li>
-          <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/specification/" target="_blank" rel="noreferrer">Specification overview and definitions ↗</a></li>
-          <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/faq/" target="_blank" rel="noreferrer">FAQ and protocol scope ↗</a></li>
-          <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/certification/" target="_blank" rel="noreferrer">Certification process ↗</a></li>
-          <li><a class="docs-link" href="https://www.talq-consortium.org/certified-products.html" target="_blank" rel="noreferrer">Official certified-products list ↗</a></li>
-        </ul><p style="margin-top:12px;color:#7b8798;font-size:11px">This page summarizes public official materials and links to the normative files. Consult the selected version's OpenAPI definitions for implementation detail; this guide is not a certification document.</p></div></section>
+      <section class="docs-page" id="docsPage" aria-label="Official TALQ specification">
+        <div class="docs-hero">
+          <div class="eyebrow" style="color:#8bc2ff">Normative specification reference</div>
+          <h1>TALQ Smart City Protocol</h1>
+          <p>Official TALQ specification resources and versioned OpenAPI contracts. Use the normative files below for implementation; this page does not replace the official specification.</p>
+          <div style="margin-top:16px"><span class="docs-pill">TALQ Specification 2.7.1 · 16 April 2026</span></div>
+        </div>
+        <section class="docs-section" id="docs-overview"><h2>Official specification files</h2>
+          <div class="docs-warning">TALQ defines interoperability between Central Management Software (CMS) and an Outdoor Device Network (ODN) through the Gateway interface. Use the API contract that matches the product role. The official repository and its versioned files are the source of truth for required paths, operations, data types, mandatory fields, responses, and protocol behavior.</div>
+          <div class="docs-grid">
+            <article class="docs-card"><h3>1. Approved TALQ specification</h3><p>Human-readable technical specification, protocol concepts, and version history.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification" target="_blank" rel="noreferrer">Open official specification repository ↗</a></article>
+            <article class="docs-card"><h3>2. TALQ shared data model — 2.7.1</h3><p>Shared TALQ entities and schemas used by both API contracts, including device, function, attribute, event, calendar, and control-program models.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-data-model-2-7-1.json" target="_blank" rel="noreferrer">Open talq-data-model-2-7-1.json ↗</a></article>
+            <article class="docs-card"><h3>3. TALQ Gateway API — 2.7.1</h3><p>Normative OpenAPI contract for the Gateway side: resource paths, HTTP methods, parameters, schemas, responses, and operation definitions.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-api-gateway-2-7-1.json" target="_blank" rel="noreferrer">Open talq-api-gateway-2-7-1.json ↗</a></article>
+            <article class="docs-card"><h3>4. TALQ CMS API — 2.7.1</h3><p>Normative OpenAPI contract for the Central Management Software side: resource paths, HTTP methods, parameters, schemas, responses, and operation definitions.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-api-cms-2-7-1.json" target="_blank" rel="noreferrer">Open talq-api-cms-2-7-1.json ↗</a></article>
+          </div>
+        </section>
+        <section class="docs-section" id="docs-contracts"><h2>Specification structure</h2>
+          <div class="panel"><div class="table-wrap"><table class="docs-table"><thead><tr><th>Specification component</th><th>Implementation purpose</th></tr></thead><tbody>
+            <tr><td><strong>Approved specification</strong></td><td>Protocol requirements and explanatory technical definitions.</td></tr>
+            <tr><td><strong>Shared data model OAS</strong></td><td>Reusable protocol objects, fields, enumerations, data types, and schema constraints.</td></tr>
+            <tr><td><strong>Gateway API OAS</strong></td><td>Gateway-side endpoints, operations, request/response definitions, and parameters.</td></tr>
+            <tr><td><strong>CMS API OAS</strong></td><td>CMS-side endpoints, operations, request/response definitions, and parameters.</td></tr>
+          </tbody></table></div></div>
+          <p class="sub" style="margin-top:10px">TALQ 2.7.1 release notes include corrections to the UUID format for <code>clientAddress</code> in some CMS and Gateway methods, and to <code>deviceAddress</code> parameters. Confirm the exact schema and format in the selected operation in the official OpenAPI file.</p>
+        </section>
+        <section class="docs-section" id="docs-uuid"><h2>Client address (UUID)</h2>
+          <div class="docs-card">
+            <p><strong>Example UUID format</strong></p>
+            <div class="docs-code">550e8400-e29b-41d4-a716-446655440000</div>
+            <p><strong>macOS — generate a UUID</strong></p>
+            <div class="docs-code">uuidgen</div>
+            <p>Open Terminal, run <code>uuidgen</code>, and copy the generated UUID. macOS typically prints uppercase hexadecimal characters; UUID comparison and formatting requirements must follow the official TALQ contract for the operation.</p>
+            <p><strong>Windows — PowerShell</strong></p>
+            <div class="docs-code">[guid]::NewGuid().ToString()</div>
+            <p>Open PowerShell, run the command, and copy the generated UUID string.</p>
+            <p><strong>Windows — Command Prompt (optional)</strong></p>
+            <div class="docs-code">powershell -NoProfile -Command "[guid]::NewGuid().ToString()"</div>
+            <div class="docs-warning"><strong>Important:</strong> generating a UUID only creates a syntactically valid identifier. It does not register, authorize, or assign a TALQ client. Use the actual <code>clientAddress</code> agreed or assigned for your CMS/Gateway integration, and verify its meaning in the relevant 2.7.1 operation. Do not use an API key as a clientAddress.</div>
+          </div>
+        </section>
+        <section class="docs-section" id="docs-release"><h2>Version and conformance references</h2>
+          <div class="docs-card"><ul>
+            <li><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/README.md" target="_blank" rel="noreferrer">Official release history and 2.7.1 release notes ↗</a></li>
+            <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/specification/" target="_blank" rel="noreferrer">TALQ specification overview ↗</a></li>
+            <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/certification/" target="_blank" rel="noreferrer">Official TALQ certification process ↗</a></li>
+            <li><a class="docs-link" href="https://www.talq-consortium.org/certified-products.html" target="_blank" rel="noreferrer">Official list of TALQ-certified products ↗</a></li>
+          </ul><p style="margin-top:12px;color:#7b8798;font-size:11px">TALQ certification is distinct from implementing an API key workflow or exposing a Swagger UI. Consult the Consortium's current certification requirements for formal conformance.</p></div>
+        </section>
       </section>
     </div>
   </main>

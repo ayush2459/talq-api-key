@@ -72,7 +72,7 @@ class AccessRequest(Base):
 
 
 class APIKeyManagerCredential(Base):
-    """High-entropy management credential scoped to one verified access request."""
+    """Management credential bound to a verified email and Telegram username."""
     __tablename__ = "api_key_manager_credentials_v2"
     id: Mapped[int] = mapped_column(primary_key=True)
     access_request_id: Mapped[int] = mapped_column(ForeignKey("access_requests.id"), index=True)
@@ -470,7 +470,7 @@ def list_managed_api_keys(
     credential: APIKeyManagerCredential = Depends(require_management_credential),
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """List safe metadata only for keys created by the same verified access request."""
+    """List safe metadata for requests matching this verified email/Telegram identity."""
     rows = db.scalars(
         select(ClientAPIKey)
         .join(AccessRequest, ClientAPIKey.access_request_id == AccessRequest.id)

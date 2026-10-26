@@ -73,6 +73,17 @@
           </tbody></table></div></div>
           <p class="sub" style="margin-top:10px">TALQ 2.7.1 release notes include corrections to the UUID format for <code>clientAddress</code> in some CMS and Gateway methods, and to <code>deviceAddress</code> parameters. Confirm the exact schema and format in the selected operation in the official OpenAPI file.</p>
         </section>
+        <section class="docs-section" id="docs-features"><h2>Gateway API feature areas — five capabilities</h2>
+          <p class="sub">The FlowSense TALQ Gateway project groups its planned integration endpoints into the five capability areas below. These describe what a client integration is intended to do; exact operations, request fields, response schemas, and required behavior must be checked against the official TALQ 2.7.1 OpenAPI contracts above.</p>
+          <div class="docs-grid">
+            <article class="docs-card"><h3>1. Device Management</h3><p>Discover and manage the devices exposed through the Gateway integration, including device identifiers and supported device information, where implemented by the endpoint and TALQ contract.</p><p><strong>Typical use:</strong> a CMS discovers which devices are available to monitor or control.</p></article>
+            <article class="docs-card"><h3>2. Device Status Monitoring</h3><p>Retrieve current device status and availability information supported by the Gateway, so a client can identify devices that are online, offline, or reporting a status change.</p><p><strong>Typical use:</strong> a CMS checks operational status before taking action.</p></article>
+            <article class="docs-card"><h3>3. Measurement Data Retrieval</h3><p>Read supported measurements and telemetry associated with devices, using the parameters and data types defined by the relevant endpoint.</p><p><strong>Typical use:</strong> a CMS collects readings for dashboards, monitoring, or downstream analysis.</p></article>
+            <article class="docs-card"><h3>4. Event Management</h3><p>Access and process supported device or Gateway events, such as reported faults or status changes, according to the implemented event operations and their TALQ schemas.</p><p><strong>Typical use:</strong> a CMS receives or retrieves events for alerts and operational follow-up.</p></article>
+            <article class="docs-card"><h3>5. Remote Configuration</h3><p>Submit supported configuration changes to devices or Gateway-managed resources only where the relevant operation permits it and the implementation supports it.</p><p><strong>Typical use:</strong> an authorized CMS requests a configuration update and handles the defined response.</p></article>
+          </div>
+          <div class="docs-warning"><strong>Implementation and conformance note:</strong> these are the five capability groups planned for the FlowSense Gateway API-key integration, not a claim that every operation is fully implemented or that this project is TALQ-certified. The current dashboard is a frontend demo and is not connected to the backend. Confirm actual routes in the live API documentation and validate every operation against the official TALQ specification before relying on it in production.</div>
+        </section>
         <section class="docs-section" id="docs-uuid"><h2>Client address (UUID)</h2>
           <div class="docs-card">
             <p><strong>Example UUID format</strong></p>

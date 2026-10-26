@@ -26,4 +26,4 @@ services:
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
       - key: FRONTEND_ORIGINS
-        value: "https://flowsense-talq-gateway.onrender.com"
+        sync: false

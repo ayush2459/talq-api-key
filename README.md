@@ -67,7 +67,7 @@ py -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Put the generated value into `ADMIN_API_KEY` in `.env`. Do not use a client API key as the admin key, and never commit `.env`.
 
-The local example uses SQLite. Configure SMTP for real verification-email delivery; tests mock the email sender:
+The local example uses SQLite. Configure the Telegram bot settings for verification; tests mock Telegram message delivery:
 
 ```dotenv
 ADMIN_API_KEY=replace-with-your-generated-admin-secret
@@ -75,14 +75,12 @@ DATABASE_URL=sqlite:///./flowsense_talq.db
 TALQ_CLIENT_ADDRESS=
 DEMO_MODE=true
 API_KEY_LIFETIME_DAYS=90
-EMAIL_VERIFICATION_MINUTES=30
+TELEGRAM_VERIFICATION_MINUTES=30
 PUBLIC_BASE_URL=http://127.0.0.1:8000
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USERNAME=replace-with-smtp-username
-SMTP_PASSWORD=replace-with-smtp-password
-SMTP_FROM_EMAIL=api@example.com
-SMTP_USE_STARTTLS=true
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=
+TELEGRAM_WEBHOOK_SECRET=
+FRONTEND_ORIGINS=http://127.0.0.1:5500,http://localhost:5500
 ```
 
 Start the service:
@@ -156,7 +154,7 @@ Open the returned `telegram_url`, press Start with the matching Telegram account
 - Keep `ADMIN_API_KEY` restricted to trusted administrators.
 - The raw client API key and verification token are each shown only in their one-time flows; only hashes are persisted.
 - Configure SMTP environment variables before enabling access requests; email delivery fails closed if SMTP is missing or fails.
-- `API_KEY_LIFETIME_DAYS` defaults to 90 (allowed: 1–3650); `EMAIL_VERIFICATION_MINUTES` defaults to 30 (allowed: 5–1440).
+- `API_KEY_LIFETIME_DAYS` defaults to 90 (allowed: 1–3650); `TELEGRAM_VERIFICATION_MINUTES` defaults to 30 (allowed: 5–1440).
 - Apply `migrations/001_email_verification_and_key_expiration.postgresql.sql` to an existing PostgreSQL database before deploying. Back up first. Existing keys receive a 90-day lifetime from their original creation time.
 - Revoke a key if it is exposed or no longer needed.
 - The public request endpoint should be protected with rate limiting and abuse monitoring before broad public release.

@@ -204,7 +204,7 @@
   const isActive = (k)=>k.status==="Active" && (!k.expiresAt || k.expiresAt>now());
   function toast(message){$("toastRoot").innerHTML='<div class="toast">'+esc(message)+'</div>';setTimeout(()=>$("toastRoot").innerHTML="",3000)}
   function render(){
-    const toolbar=document.querySelector(".top-actions")||document.querySelector(".topbar-actions");
+    const toolbar=document.querySelector(".top-actions")||document.querySelector(".topbar-actions")||document.querySelector(".topbar");
     if(toolbar&&!document.getElementById("connectManagerBtn")){
       const b=document.createElement("button");b.id="connectManagerBtn";b.className="btn btn-secondary";b.textContent="Connect key manager";b.style.marginRight="8px";b.onclick=connectManagerToken;toolbar.prepend(b);
     }
@@ -220,7 +220,7 @@
     $("tableArea").innerHTML='<div class="table-wrap"><table><thead><tr><th>Key name</th><th>Client address</th><th>Status</th><th>Expiry</th><th>Created</th><th>Actions</th></tr></thead><tbody>'+filtered.map(k=>{
       const activeNow=isActive(k),status=activeNow?'Active':(k.status==="Revoked"?'Revoked':'Expired');
       const cls=status==="Active"?'active-status':status==="Revoked"?'revoked-status':'expired-status';
-      return '<tr><td><div class="key-name">'+esc(k.name)+'</div><div class="key-sub">'+esc(k.organization)+' · '+esc(k.prefix)+'</div></td><td><span class="mono">'+esc(k.clientAddress)+'</span></td><td><span class="status '+cls+'">'+status+'</span></td><td>'+ (k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</td><td>'+esc(fmt(k.createdAt))+'</td><td><button class="btn btn-danger" style="padding:7px 10px;font-size:11px" data-revoke="'+esc(k.id)+'" '+(!activeNow||!k.apiKey?'disabled title="Revoke is available only in the session where the secret was issued"':'')+'>Revoke</button></td></tr>';
+      return '<tr><td><div class="key-name">'+esc(k.name)+'</div><div class="key-sub">'+esc(k.organization)+' · '+esc(k.prefix)+'</div></td><td><span class="mono">'+esc(k.clientAddress)+'</span></td><td><span class="status '+cls+'">'+status+'</span></td><td>'+ (k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</td><td>'+esc(fmt(k.createdAt))+'</td><td><button class="btn btn-danger" style="padding:7px 10px;font-size:11px" data-revoke="'+esc(k.id)+'" '+(!activeNow||!managerToken?'disabled title="Connect your key management token to revoke this key"':'')+'>Revoke</button></td></tr>';
     }).join('')+'</tbody></table></div>';
     document.querySelectorAll("[data-revoke]").forEach(b=>b.addEventListener("click",()=>confirmRevoke(b.dataset.revoke)));
   }
@@ -365,6 +365,7 @@
   $("createBtn").addEventListener("click",openCreate);$("searchInput").addEventListener("input",render);
   document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
   render();
+  refreshManagedKeys();
 })();
 </script>
 </body>

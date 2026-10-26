@@ -1,20 +1,20 @@
 # FlowSense TALQ Gateway
 
-**A FastAPI-based pilot gateway with approval-based client API key issuance.**
+**A FastAPI-based pilot gateway with Telegram-verified client API key issuance.**
 
-FlowSense TALQ Gateway explores a secure access workflow for connecting authorized client systems to a future FlowSense/TALQ integration. A client submits an access request; the gateway emails a one-time verification token; after email ownership is verified, the service automatically issues a unique API key bound to that CMS UUID. Keys expire after 90 days by default and can also be revoked.
+FlowSense TALQ Gateway provides a pilot access workflow for connecting client systems to a future FlowSense/TALQ integration. A client submits an access request, opens a one-time Telegram deep link, and verifies that the Telegram sender matches the submitted username. Only then can the client exchange its request token for a unique API key bound to its CMS UUID. Keys expire after 90 days by default and can be revoked.
 
 > **Status:** Pilot scaffold, not a complete or TALQ-certified implementation. Device and data-package collections are placeholders. Live FlowSense integration, complete TALQ schema validation, and production security controls remain future work.
 
 ## Access lifecycle
 
-1. **Request access:** Client submits contact name, email, organization, purpose, and CMS UUID to `POST /access-requests`.
-2. **Verify email:** Gateway sends a one-time token to the submitted email address. It expires after 30 minutes by default.
-3. **Automatic issuance:** Client submits the token to `POST /verify-email`. The gateway issues a client API key automatically and shows it once; no manual admin approval is required.
-4. **Use API:** Client sends the key using `X-API-Key`, plus `talq-api-version: 2.7.1` and its approved `clientAddress`.
-5. **Expiration/revocation:** Keys expire after 90 days by default. An administrator can also revoke a key using `POST /admin/api-keys/{key_id}/revoke`.
+1. **Request access:** The browser submits contact name, email, organization, Telegram username, purpose, and CMS UUID to `POST /access-requests`.
+2. **Verify Telegram:** The gateway returns a one-time `https://t.me/<bot>?start=<token>` deep link. The user opens the configured bot and presses Start. The webhook validates the Telegram secret header, link expiry, and sender username.
+3. **Check status:** The browser polls `GET /access-requests/{request_id}/status` using its private `X-Request-Token`.
+4. **Issue a key:** After verification, `POST /access-requests/{request_id}/issue-key` returns a high-entropy key once. Only a SHA-256 hash is stored.
+5. **Use and revoke:** Client requests use `X-API-Key`. The owner can revoke a key belonging to the same access request; administrators retain a separate admin-only revocation route. Keys expire after 90 days by default.
 
-Only a SHA-256 hash of each issued API key is stored in the database. The raw key is not retrievable later, so the client must save it securely when issued. The admin credential is separate from client API keys and must never be shared with clients.
+The raw API key and request token must not be logged or stored in browser local storage. The dashboard keeps key material in memory for the current page session; refresh loses access to that one-time display. The admin credential is never sent to the browser.
 
 ## API endpoints
 
@@ -28,10 +28,13 @@ Only a SHA-256 hash of each issued API key is stored in the database. The raw ke
 - `POST /admin/api-keys/{key_id}/revoke` — revoke an issued key.
 
 ### Client authentication and issuance
-- `POST /verify-email` — exchange a one-time email verification token for a client API key. The raw key is returned once.
-- `GET /auth/verify` — verify an issued client API key and return safe organization/client metadata. Requires `X-API-Key`.
-
-See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for the partner-backend request examples and Python client sample.
+- `POST /access-requests` — create a request and return a Telegram verification link plus a private request token.
+- `POST /telegram/webhook` — Telegram webhook endpoint (configured with Telegram's `secret_token` header).
+- `GET /access-requests/{request_id}/status` — check verification status using `X-Request-Token`.
+- `POST /access-requests/{request_id}/issue-key` — issue the key after verification; raw key is returned once.
+- `GET /auth/verify` — verify an issued client API key and return safe organization/client metadata.
+- `POST /auth/api-keys/{key_id}/revoke` — revoke a key within the authenticated request's own key scope.
+- `POST /admin/api-keys/{key_id}/revoke` — admin-only revocation using `X-Admin-Key`.
 
 ### Protected gateway pilot routes (requires `X-API-Key`)
 - `GET /integration-status`
@@ -109,6 +112,26 @@ The repository includes a Dockerfile and Render Blueprint. For approval and API-
 
 Do not rely on the default SQLite file for a cloud deployment: local files on ephemeral hosting may be lost during redeploys or restarts. Never commit database credentials or admin secrets to GitHub.
 
+## Telegram bot setup
+
+1. Create a bot with Telegram's official BotFather and keep the bot token private.
+2. Set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` (without the leading `@`), and `TELEGRAM_WEBHOOK_SECRET` as backend environment variables.
+3. After deploying the backend to HTTPS, configure the webhook from a trusted PowerShell session. Set the token in your shell without committing it:
+   ```powershell
+   $env:TELEGRAM_BOT_TOKEN = "paste-token-from-BotFather"
+   $env:TELEGRAM_WEBHOOK_SECRET = "use-a-long-random-secret"
+   $body = @{
+     url = "https://flowsense-talq-gateway.onrender.com/telegram/webhook"
+     secret_token = $env:TELEGRAM_WEBHOOK_SECRET
+     allowed_updates = @("message")
+   } | ConvertTo-Json
+   Invoke-RestMethod -Method Post -Uri "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/setWebhook" -ContentType "application/json" -Body $body
+   Remove-Item Env:TELEGRAM_BOT_TOKEN
+   ```
+4. Confirm Telegram reports `ok: true`, then test a new access request end to end. Never publish bot tokens or webhook secrets in issues, screenshots, source control, or browser code.
+
+The webhook must be configured only after the service is publicly reachable over HTTPS. Local UI testing can validate request creation and API connectivity, but Telegram cannot call a local-only webhook.
+
 ## Example access workflow
 
 Submit a request in Swagger UI using `POST /access-requests`:
@@ -151,7 +174,7 @@ The gateway emails a one-time verification token. Submit it to `POST /verify-ema
 - [x] Basic FastAPI gateway scaffold and protected routes.
 - [x] Email-verification-based automatic API key issuance, 90-day default expiration, and revocation workflow.
 - [x] Store issued API keys as hashes.
-- [ ] Add rate limiting, email verification, audit events, and richer admin identity management.
+- [ ] Add rate limiting, Telegram webhook monitoring, rate limiting, audit events, and richer admin identity management.
 - [ ] Map real FlowSense meter and sensor data into applicable TALQ models.
 - [ ] Validate the required operations and payloads against the official specification.
 - [ ] Run integration tests with the target CMS and review production security.

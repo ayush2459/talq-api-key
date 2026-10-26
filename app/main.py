@@ -73,9 +73,11 @@ class AccessRequest(Base):
 
 class APIKeyManagerCredential(Base):
     """High-entropy management credential scoped to one verified access request."""
-    __tablename__ = "api_key_manager_credentials"
+    __tablename__ = "api_key_manager_credentials_v2"
     id: Mapped[int] = mapped_column(primary_key=True)
-    access_request_id: Mapped[int] = mapped_column(ForeignKey("access_requests.id"), unique=True, index=True)
+    access_request_id: Mapped[int] = mapped_column(ForeignKey("access_requests.id"), index=True)
+    owner_email: Mapped[str] = mapped_column(String(254), index=True)
+    telegram_username: Mapped[str] = mapped_column(String(64), index=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
@@ -375,6 +377,8 @@ def issue_key_after_telegram_verification(request_id: int, payload: RequestToken
     manager_token = "fs_mgr_" + secrets.token_urlsafe(40)
     db.add(APIKeyManagerCredential(
         access_request_id=item.id,
+        owner_email=item.email,
+        telegram_username=(item.telegram_username or "").lower(),
         token_hash=hash_api_key(manager_token),
         created_at=datetime.now(timezone.utc),
     ))
@@ -467,9 +471,15 @@ def list_managed_api_keys(
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List safe metadata only for keys created by the same verified access request."""
-    rows = db.scalars(select(ClientAPIKey).where(
-        ClientAPIKey.access_request_id == credential.access_request_id
-    ).order_by(ClientAPIKey.id.desc())).all()
+    rows = db.scalars(
+        select(ClientAPIKey)
+        .join(AccessRequest, ClientAPIKey.access_request_id == AccessRequest.id)
+        .where(
+            AccessRequest.email == credential.owner_email,
+            AccessRequest.telegram_username == credential.telegram_username,
+        )
+        .order_by(ClientAPIKey.id.desc())
+    ).all()
     now = datetime.now(timezone.utc)
     return [{
         "id": row.id,
@@ -491,7 +501,14 @@ def revoke_managed_api_key(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     target = db.get(ClientAPIKey, key_id)
-    if target is None or target.access_request_id != credential.access_request_id:
+    if target is None:
+        raise HTTPException(status_code=404, detail="API key not found")
+    owner_request = db.get(AccessRequest, target.access_request_id)
+    if (
+        owner_request is None
+        or owner_request.email != credential.owner_email
+        or (owner_request.telegram_username or "").lower() != credential.telegram_username
+    ):
         raise HTTPException(status_code=404, detail="API key not found")
     if target.revoked_at is None:
         target.revoked_at = datetime.now(timezone.utc)

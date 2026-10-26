@@ -366,7 +366,7 @@ def issue_key_after_telegram_verification(request_id: int, payload: RequestToken
 
 @app.get("/admin/access-requests", tags=["Admin"], dependencies=[Depends(require_admin_key)])
 def list_access_requests(
-    request_status: str = Query(default="pending_verification", alias="status", pattern="^(pending_verification|verified|all)$"),
+    request_status: str = Query(default="pending_verification", alias="status", pattern="^(pending_verification|verified|issuing|key_issued|all)$"),
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
     query = select(AccessRequest).order_by(AccessRequest.id.desc())

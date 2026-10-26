@@ -423,6 +423,22 @@ def verify_api_key(api_key: ClientAPIKey = Depends(require_api_key)) -> dict[str
     }
 
 
+@app.post("/auth/api-keys/{key_id}/revoke", tags=["Authentication"])
+def revoke_own_api_key(
+    key_id: int,
+    api_key: ClientAPIKey = Depends(require_api_key),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Allow an authenticated integration to revoke keys belonging to the same access request."""
+    target = db.get(ClientAPIKey, key_id)
+    if target is None or target.access_request_id != api_key.access_request_id:
+        raise HTTPException(status_code=404, detail="API key not found")
+    if target.revoked_at is None:
+        target.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"api_key_id": target.id, "revoked": True}
+
+
 @app.get("/integration-status", dependencies=[Depends(require_api_key)])
 def integration_status(api_key: ClientAPIKey = Depends(require_api_key)) -> dict[str, Any]:
     return {

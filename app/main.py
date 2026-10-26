@@ -9,7 +9,7 @@ import re
 import secrets
 import json
 from urllib.error import URLError, HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import Request as URLRequest, urlopen
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -178,7 +178,7 @@ def telegram_api(method: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("Telegram bot is not configured.")
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}"
     body = json.dumps(payload).encode("utf-8")
-    request = Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    request = URLRequest(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
     try:
         with urlopen(request, timeout=12) as response:
             result = json.loads(response.read().decode("utf-8"))

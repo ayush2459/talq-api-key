@@ -127,6 +127,15 @@
 <script>
 (function(){
   const $ = (id)=>document.getElementById(id);
+  const API_BASE_URL = (window.FLOWSENSE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\\/$/, "");
+  async function apiFetch(path, options={}) {
+    let response;
+    try { response = await fetch(API_BASE_URL + path, options); }
+    catch (error) { throw new Error("Cannot reach the FlowSense API. Check that the backend is running and CORS is configured."); }
+    const body = await response.json().catch(()=>({detail:"Unexpected API response"}));
+    if (!response.ok) throw new Error(body.detail || "API request failed (" + response.status + ")");
+    return body;
+  }
   let keys = [];
   let currentSecret = null;
   let modalStep = 1;
@@ -162,37 +171,97 @@
     modal('<div class="modal-head"><div><h2>Create a new API key</h2><p>Enter the integration details to begin the verification flow.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body">'+stepper(1)+'<form id="detailsForm" novalidate><div class="form-grid">'+
       field("organization","Organization name","text","e.g. ABC Smart Systems",true)+
       field("contactName","Contact name","text","Your full name",true)+
-      field("telegram","Telegram username","text","@your_username",true,"Use the account you will connect to the FlowSense bot.")+
+      field("email","Contact email","email","you@company.com",true,"Used for contact and request records; verification happens through Telegram.")+
+      field("telegram","Telegram username","text","@your_username",true,"The username must match the Telegram account that starts the bot.")+
       field("clientAddress","Client address (UUID)","text","xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",true,"Use the CMS client UUID assigned to your integration.")+
       '<div class="field full"><label for="purpose">Purpose of integration <span class="required">*</span></label><textarea id="purpose" name="purpose" required placeholder="Briefly explain how your application will use the gateway.">'+esc(formData.purpose||"")+'</textarea><div class="field-error">Please enter an integration purpose.</div></div>'+
       '<div class="field full"><label for="expiry">API key expiry <span class="required">*</span></label><select id="expiry" name="expiry"><option value="90" '+(formData.expiry==="90"?'selected':'')+'>90 days</option><option value="180" '+(formData.expiry==="180"?'selected':'')+'>180 days</option><option value="365" '+(formData.expiry==="365"?'selected':'')+'>365 days</option><option value="never" '+(formData.expiry==="never"?'selected':'')+'>Never (permanent key)</option></select><div class="hint">Permanent keys carry additional security risk and may be restricted by policy.</div></div></div>'+
       '<div class="modal-actions"><button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button><div class="right"><button type="submit" class="btn btn-primary">Continue to Telegram <span>→</span></button></div></div></form></div>',true);
     $("closeModal").onclick=closeModal;$("cancelBtn").onclick=closeModal;
-    $("detailsForm").addEventListener("submit",e=>{e.preventDefault();const f=e.currentTarget;let ok=true;f.querySelectorAll("[required]").forEach(el=>{const wrap=el.closest(".field");const invalid=!el.value.trim()||(el.name==="clientAddress"&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(el.value.trim()));wrap.classList.toggle("invalid",invalid);if(invalid)ok=false});if(!ok){toast("Please complete all required fields and enter a valid UUID.");return}formData=Object.fromEntries(new FormData(f).entries());renderTelegram()});
-    ["organization","contactName","telegram","clientAddress","purpose","expiry"].forEach(id=>{const el=$(id);if(el&&formData[id])el.value=formData[id]});
+    $("detailsForm").addEventListener("submit",e=>{e.preventDefault();const f=e.currentTarget;let ok=true;f.querySelectorAll("[required]").forEach(el=>{const wrap=el.closest(".field");const invalid=!el.value.trim()||(el.name==="clientAddress"&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(el.value.trim()));wrap.classList.toggle("invalid",invalid);if(invalid)ok=false});if(!ok){toast("Please complete all required fields and enter a valid UUID.");return}formData=Object.fromEntries(new FormData(f).entries());submitAccessRequest()});
+    ["organization","contactName","email","telegram","clientAddress","purpose","expiry"].forEach(id=>{const el=$(id);if(el&&formData[id])el.value=formData[id]});
   }
   function field(name,label,type,placeholder,required,hint){return '<div class="field"><label for="'+name+'">'+label+(required?' <span class="required">*</span>':'')+'</label><input id="'+name+'" name="'+name+'" type="'+type+'" placeholder="'+esc(placeholder)+'" '+(required?'required':'')+' value="'+esc(formData[name]||"")+'">'+(hint?'<div class="hint">'+esc(hint)+'</div>':'')+'<div class="field-error">Please enter a valid '+label.toLowerCase()+'.</div></div>'}
+  async function submitAccessRequest(){
+    const submit = $("detailsForm")?.querySelector('button[type="submit"]');
+    if(submit){submit.disabled=true;submit.textContent="Submitting request…";}
+    try{
+      const response = await apiFetch("/access-requests",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          contact_name:formData.contactName,
+          email:formData.email,
+          organization:formData.organization,
+          telegram_username:formData.telegram,
+          purpose:formData.purpose,
+          client_address:formData.clientAddress
+        })
+      });
+      formData.requestId=response.request_id;
+      formData.requestToken=response.request_token;
+      formData.telegramUrl=response.telegram_url;
+      renderTelegram();
+    }catch(error){
+      toast(error.message);
+      renderForm();
+    }
+  }
   function renderTelegram(){
-    modal('<div class="modal-head"><div><h2>Connect your Telegram account</h2><p>Verify that you control the Telegram account linked to this request.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body">'+stepper(2)+'<div class="verify-card"><div class="telegram-logo">➤</div><h3>Verify with Telegram</h3><p>In the connected version, this step opens the official FlowSense Telegram bot. After you press Start, the backend will deliver a short-lived verification code to the linked account.</p><div class="notice warn" style="text-align:left"><span class="notice-icon">⚠</span><div><strong>Prototype mode</strong><br>No Telegram bot is connected yet. This screen is a UI preview only; it does not send a message or verify your account.</div></div><div class="verify-demo">Planned bot: <strong>@FlowSenseGatewayBot</strong> <span style="color:#9a6a1d">(placeholder — not registered)</span></div></div><div class="modal-actions"><button class="btn btn-secondary" id="backBtn">← Back</button><div class="right"><button class="btn btn-primary" id="demoVerify">Preview verification <span>→</span></button></div></div></div>',true);
-    $("closeModal").onclick=closeModal;$("backBtn").onclick=renderForm;$("demoVerify").onclick=renderCode;
+    modal('<div class="modal-head"><div><h2>Verify with Telegram</h2><p>Complete verification using the Telegram account you entered.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body">'+stepper(2)+'<div class="verify-card"><div class="telegram-logo">➤</div><h3>Open the official bot</h3><p>Open Telegram, press Start in the bot, and make sure you are using <strong>'+esc(formData.telegram)+'</strong>. The backend verifies the sender, not just the typed username.</p><a class="btn btn-primary" id="telegramStart" href="'+esc(formData.telegramUrl)+'" target="_blank" rel="noopener noreferrer" style="text-decoration:none">Open Telegram bot ↗</a><div id="telegramStatus" class="verify-demo">Waiting for Telegram verification. This link expires in '+TELEGRAM_EXPIRY_LABEL+'.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="backBtn">← Back</button><div class="right"><button class="btn btn-secondary" id="checkTelegram">Check status</button><button class="btn btn-primary hidden" id="issueRealKey">Issue API key →</button></div></div></div>',true);
+    $("closeModal").onclick=closeModal;
+    $("backBtn").onclick=renderForm;
+    $("checkTelegram").onclick=checkTelegramStatus;
+    $("issueRealKey").onclick=issueRealKey;
   }
-  function renderCode(){
-    modal('<div class="modal-head"><div><h2>Telegram verification</h2><p>Prototype-only step to preview the next screen.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body">'+stepper(2)+'<div class="verify-card"><div class="telegram-logo">✉</div><h3>Enter verification code</h3><p>In production, the code will be sent by the FlowSense Telegram bot. No real code has been sent in this prototype.</p><form id="codeForm"><div class="field"><label for="verificationCode">6-digit verification code</label><input id="verificationCode" class="code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" pattern="[0-9]{6}" required></div><div class="verify-demo">Demo only: enter any six digits to preview the one-time key screen. This does not verify identity or issue a real API credential.</div><div style="margin-top:18px"><button type="submit" class="btn btn-primary" style="width:100%">Preview API key screen →</button></div></form></div><div class="modal-actions"><button class="btn btn-secondary" id="backBtn">← Back</button><span></span></div></div>',true);
-    $("closeModal").onclick=closeModal;$("backBtn").onclick=renderTelegram;$("codeForm").onsubmit=e=>{e.preventDefault();if(!/^\d{6}$/.test($("verificationCode").value)){toast("Enter six digits to continue the UI preview.");return}generateDemoKey()};
+  const TELEGRAM_EXPIRY_LABEL = "30 minutes";
+  async function checkTelegramStatus(){
+    const button=$("checkTelegram"),statusEl=$("telegramStatus");
+    button.disabled=true;button.textContent="Checking…";
+    try{
+      const status=await apiFetch("/access-requests/"+encodeURIComponent(formData.requestId)+"/status",{
+        headers:{"X-Request-Token":formData.requestToken}
+      });
+      if(status.status==="verified" && status.telegram_verified){
+        statusEl.textContent="Telegram verified successfully. You can now issue your API key.";
+        statusEl.className="verify-demo";
+        $("issueRealKey").classList.remove("hidden");
+        button.textContent="Verified";
+      }else if(status.status==="key_issued"){
+        statusEl.textContent="A key has already been issued for this request. Close this dialog if you have already copied it.";
+        button.textContent="Already issued";
+      }else{
+        statusEl.textContent="Still waiting for Telegram verification. Open the bot and press Start, then check again.";
+        button.textContent="Check status";
+      }
+    }catch(error){
+      statusEl.textContent=error.message;
+      button.textContent="Retry status";
+    }finally{button.disabled=false;}
   }
-  function generateDemoKey(){
-    const alphabet="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-    const random=Array.from({length:36},()=>alphabet[Math.floor(Math.random()*alphabet.length)]).join("");
-    currentSecret="fs_demo_"+random;
-    const expiry=formData.expiry==="never"?null:expiryDate(formData.expiry);
-    const k={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),name:formData.organization+" Integration",organization:formData.organization,clientAddress:formData.clientAddress,createdAt:now(),expiresAt:expiry,status:"Active",prefix:"fs_demo_…"};
-    renderSecret(k,currentSecret);
+  async function issueRealKey(){
+    const button=$("issueRealKey");button.disabled=true;button.textContent="Issuing…";
+    try{
+      const result=await apiFetch("/access-requests/"+encodeURIComponent(formData.requestId)+"/issue-key",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({request_token:formData.requestToken})
+      });
+      const k={
+        id:result.api_key_id,name:formData.organization+" Integration",
+        organization:formData.organization,clientAddress:result.client_address,
+        createdAt:new Date(result.created_at),expiresAt:result.expires_at?new Date(result.expires_at):null,
+        status:"Active",prefix:result.api_key.slice(0,15)+"…",apiKey:result.api_key,
+        telegram:formData.telegram,mode:"Live backend"
+      };
+      renderSecret(k,result.api_key);
+    }catch(error){
+      toast(error.message);button.disabled=false;button.textContent="Retry API key issuance";
+    }
   }
   function renderSecret(k,secret){
-    modal('<div class="modal-head"><div><h2>API key generated</h2><p>Preview state — no real backend key was created.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="verify-card"><div class="success-mark">✓</div><h3>Key creation screen</h3><p>This simulates the one-time display. In production, the raw key must be returned by the backend once and never stored by the browser.</p></div><div class="notice warn"><span class="notice-icon">⚠</span><div><strong>One-time display</strong><br>Copy this demo value now. When you leave this screen, the value will be cleared and cannot be recovered.</div></div><div class="key-secret"><code id="secretText">'+esc(secret)+'</code><button class="btn btn-secondary" id="copySecret">Copy</button></div><div class="metadata"><span>Organization</span><span>'+esc(k.organization)+'</span><span>Client UUID</span><span>'+esc(k.clientAddress)+'</span><span>Expires</span><span>'+(k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</span><span>Telegram</span><span>'+esc(formData.telegram)+'</span><span>Mode</span><span>Demo only — not a valid API key</span></div><div class="modal-actions"><button class="btn btn-secondary" id="closeWithoutSave">Close</button><div class="right"><button class="btn btn-primary" id="finishDemo">Finish preview</button></div></div></div>',true);
+    modal('<div class="modal-head"><div><h2>API key generated</h2><p>Issued by the FlowSense backend after Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="verify-card"><div class="success-mark">✓</div><h3>Your API key is ready</h3><p>This is a real backend credential. Copy it now; the backend stores only its hash and will not reveal it again.</p></div><div class="notice warn"><span class="notice-icon">⚠</span><div><strong>One-time display</strong><br>Copy this key now and store it in a secure secret manager. It cannot be retrieved again from the backend.</div></div><div class="key-secret"><code id="secretText">'+esc(secret)+'</code><button class="btn btn-secondary" id="copySecret">Copy</button></div><div class="metadata"><span>Organization</span><span>'+esc(k.organization)+'</span><span>Client UUID</span><span>'+esc(k.clientAddress)+'</span><span>Expires</span><span>'+(k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</span><span>Telegram</span><span>'+esc(formData.telegram)+'</span><span>Mode</span><span>Live backend credential</span></div><div class="modal-actions"><button class="btn btn-secondary" id="closeWithoutSave">Close</button><div class="right"><button class="btn btn-primary" id="finishDemo">Finish preview</button></div></div></div>',true);
     $("closeModal").onclick=closeModal;$("closeWithoutSave").onclick=closeModal;
-    $("copySecret").onclick=async()=>{try{await navigator.clipboard.writeText(secret);toast("Demo key copied. Do not use it for API access.")}catch{toast("Clipboard unavailable — select and copy the demo value manually.")}};
-    $("finishDemo").onclick=()=>{keys.unshift(k);currentSecret=null;closeModal();render();toast("Demo record added to this page only. It will disappear on reload.")};
+    $("copySecret").onclick=async()=>{try{await navigator.clipboard.writeText(secret);toast("API key copied. Store it securely and never commit it to source control.")}catch{toast("Clipboard unavailable — select and copy the demo value manually.")}};
+    $("finishDemo").onclick=()=>{keys.unshift(k);currentSecret=null;closeModal();render();toast("API key metadata is visible for this browser session only.")};
   }
   function confirmRevoke(id){
     const k=keys.find(x=>x.id===id);if(!k)return;

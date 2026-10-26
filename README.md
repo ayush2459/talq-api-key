@@ -23,7 +23,7 @@ The raw API key and request token must not be logged or stored in browser local 
 - `POST /access-requests` — submit an access request; this does not issue a key.
 
 ### Admin-only (requires `X-Admin-Key`)
-- `GET /admin/access-requests?status=pending_verification` — inspect unverified requests. Supported statuses: `pending_verification`, `verified`, `all`.
+- `GET /admin/access-requests?status=pending_verification` — inspect unverified requests. Supported statuses: `pending_verification`, `verified`, `issuing`, `key_issued`, `all`.
 - `GET /admin/api-keys` — list key metadata, never raw keys.
 - `POST /admin/api-keys/{key_id}/revoke` — revoke an issued key.
 
@@ -34,7 +34,6 @@ The raw API key and request token must not be logged or stored in browser local 
 - `POST /access-requests/{request_id}/issue-key` — issue the key after verification; raw key is returned once.
 - `GET /auth/verify` — verify an issued client API key and return safe organization/client metadata.
 - `POST /auth/api-keys/{key_id}/revoke` — revoke a key within the authenticated request's own key scope.
-- `POST /admin/api-keys/{key_id}/revoke` — admin-only revocation using `X-Admin-Key`.
 
 ### Protected gateway pilot routes (requires `X-API-Key`)
 - `GET /integration-status`

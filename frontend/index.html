@@ -24,7 +24,7 @@
       <button type="button" data-page="docs"><span class="nav-icon">▤</span><span class="nav-label">Documentation</span></button>
       <button type="button"><span class="nav-icon">ⓘ</span><span class="nav-label">Support</span></button>
     </nav>
-    <div class="sidebar-bottom">⇥ <span class="bottom-copy">Local UI prototype</span></div>
+    <div class="sidebar-bottom">⇥ <span class="bottom-copy">Backend integration preview</span></div>
   </aside>
   <main class="main">
     <header class="topbar">
@@ -36,7 +36,7 @@
         <div><div class="eyebrow">Access management</div><h1>API Keys</h1><p class="sub">Create and manage credentials for your FlowSense TALQ Gateway integrations.</p></div>
         <button class="btn btn-primary" id="createBtn"><span>＋</span> Create API Key</button>
       </div>
-      <div style="margin-bottom:18px"><span class="demo-tag"><span class="demo-dot"></span> FRONTEND DEMO · NOT CONNECTED TO BACKEND</span></div>
+      <div style="margin-bottom:18px"><span class="demo-tag"><span class="demo-dot"></span> BACKEND INTEGRATION · CONFIGURATION REQUIRED</span></div>
       <section class="stats" aria-label="API key summary">
         <div class="stat"><div><div class="stat-label">Total keys</div><div class="stat-value" id="totalStat">0</div></div><div class="stat-icon">⚿</div></div>
         <div class="stat"><div><div class="stat-label">Active keys</div><div class="stat-value" id="activeStat">0</div></div><div class="stat-icon">✓</div></div>
@@ -47,7 +47,7 @@
         <div id="tableArea"></div>
       </section>
       <div class="notice"><span class="notice-icon">ⓘ</span><div><strong>Keep your credentials safe.</strong> Never share an API key publicly or commit it to source control. In the completed application, the backend will store only a hash of each key and enforce expiry and revocation.</div></div>
-      <p class="footer-note">FlowSense TALQ Gateway · UI-only prototype · No data is sent to a server or saved between reloads.</p>
+      <p class="footer-note">FlowSense TALQ Gateway · Backend-connected console · Key metadata is kept in memory for this browser session only.</p>
       <section class="docs-page" id="docsPage" aria-label="Official TALQ specification">
         <div class="docs-hero">
           <div class="eyebrow" style="color:#8bc2ff">Normative specification reference</div>
@@ -93,7 +93,7 @@
             <article class="docs-card"><h3>4. Event Management</h3><p>Access and process supported device or Gateway events, such as reported faults or status changes, according to the implemented event operations and their TALQ schemas.</p><p><strong>Typical use:</strong> a CMS receives or retrieves events for alerts and operational follow-up.</p></article>
             <article class="docs-card"><h3>5. Remote Configuration</h3><p>Submit supported configuration changes to devices or Gateway-managed resources only where the relevant operation permits it and the implementation supports it.</p><p><strong>Typical use:</strong> an authorized CMS requests a configuration update and handles the defined response.</p></article>
           </div>
-          <div class="docs-warning"><strong>Implementation and conformance note:</strong> these are the five capability groups planned for the FlowSense Gateway API-key integration, not a claim that every operation is fully implemented or that this project is TALQ-certified. The current dashboard is a frontend demo and is not connected to the backend. Confirm actual routes in the live API documentation and validate every operation against the official TALQ specification before relying on it in production.</div>
+          <div class="docs-warning"><strong>Implementation and conformance note:</strong> these are the five capability groups planned for the FlowSense Gateway API-key integration, not a claim that every operation is fully implemented or that this project is TALQ-certified. The dashboard uses the configured FastAPI backend for access requests, Telegram verification, key issuance, and key revocation. Telegram secrets, webhook registration, production CORS settings, and database migrations must be configured before live use. Confirm actual routes in the live API documentation and validate every operation against the official TALQ specification before relying on it in production.</div>
         </section>
         <section class="docs-section" id="docs-uuid"><h2>Client address (UUID)</h2>
           <div class="docs-card">

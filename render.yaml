@@ -9,6 +9,8 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false
+      - key: FLOW_SENSE_DATABASE_URL
+        sync: false
       - key: TALQ_CLIENT_ADDRESS
         value: ""
       - key: DEMO_MODE

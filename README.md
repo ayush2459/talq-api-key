@@ -14,7 +14,7 @@ FlowSense TALQ Gateway provides a pilot access workflow for connecting client sy
 4. **Issue a key:** After verification, `POST /access-requests/{request_id}/issue-key` returns a high-entropy key once. Only a SHA-256 hash is stored.
 5. **Use and revoke:** Client requests use `X-API-Key`. The owner can revoke a key belonging to the same access request; administrators retain a separate admin-only revocation route. Keys expire after 90 days by default.
 
-The raw API key and request token must not be logged or stored in browser local storage. The dashboard keeps key material in memory for the current page session; refresh loses access to that one-time display. The admin credential is never sent to the browser.
+The raw client API key and request token must never be logged or stored in browser storage. The dashboard stores only display metadata locally. A separate high-entropy key-management token is returned once when a key is issued; only its SHA-256 hash is stored on the server. The dashboard stores this management token in browser local storage to reload metadata and support revocation after refresh. Treat it like a password: do not share it, commit it, or use it on an untrusted device. You can connect another device by entering the management token. It is scoped to the access request that issued it, and it cannot access admin endpoints. The admin credential is never sent to the browser.
 
 ## API endpoints
 
@@ -33,7 +33,9 @@ The raw API key and request token must not be logged or stored in browser local 
 - `GET /access-requests/{request_id}/status` — check verification status using `X-Request-Token`.
 - `POST /access-requests/{request_id}/issue-key` — issue the key after verification; raw key is returned once.
 - `GET /auth/verify` — verify an issued client API key and return safe organization/client metadata.
-- `POST /auth/api-keys/{key_id}/revoke` — revoke a key within the authenticated request's own key scope.
+- `POST /auth/api-keys/{key_id}/revoke` — revoke a key within the authenticated request's own key scope, when the API key is available.
+- `GET /auth/managed-api-keys` — list safe key metadata using `X-Key-Management-Token`; returns only keys for the associated access request.
+- `POST /auth/managed-api-keys/{key_id}/revoke` — revoke a key in that same request scope using `X-Key-Management-Token`.
 
 ### Protected gateway pilot routes (requires `X-API-Key`)
 - `GET /integration-status`

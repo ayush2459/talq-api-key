@@ -71,6 +71,15 @@ class AccessRequest(Base):
     request_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
 
+class APIKeyManagerCredential(Base):
+    """High-entropy management credential scoped to one verified access request."""
+    __tablename__ = "api_key_manager_credentials"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    access_request_id: Mapped[int] = mapped_column(ForeignKey("access_requests.id"), unique=True, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class ClientAPIKey(Base):
     __tablename__ = "client_api_keys"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -98,7 +107,7 @@ app.add_middleware(
     allow_origins=FRONTEND_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key", "X-Admin-Key", "X-Request-Token", "X-Telegram-Bot-Api-Secret-Token", "talq-api-version"],
+    allow_headers=["Content-Type", "X-API-Key", "X-Admin-Key", "X-Request-Token", "X-Key-Management-Token", "X-Telegram-Bot-Api-Secret-Token", "talq-api-version"],
 )
 
 # Deliberately empty until real FlowSense device data is mapped and validated.
@@ -361,11 +370,19 @@ def issue_key_after_telegram_verification(request_id: int, payload: RequestToken
         raise HTTPException(status_code=409, detail="This access request has already been used or is being processed")
     item.status = "issuing"
     record, raw_key = _new_client_key(item, db)
+    # A separate, request-scoped management credential allows safe listing and revocation
+    # without retaining the one-time client API secret or exposing the admin credential.
+    manager_token = "fs_mgr_" + secrets.token_urlsafe(40)
+    db.add(APIKeyManagerCredential(
+        access_request_id=item.id,
+        token_hash=hash_api_key(manager_token),
+        created_at=datetime.now(timezone.utc),
+    ))
     db.commit()
     db.refresh(record)
     return {
         "status": "issued", "authenticated": False, "api_key_id": record.id,
-        "api_key": raw_key, "client_address": record.client_address,
+        "api_key": raw_key, "management_token": manager_token, "client_address": record.client_address,
         "created_at": record.created_at.isoformat(), "expires_at": record.expires_at.isoformat(),
         "lifetime_days": API_KEY_LIFETIME_DAYS,
         "warning": "Copy this key now. It is shown once; only its hash is stored.",
@@ -428,6 +445,58 @@ def revoke_api_key(key_id: int, db: Session = Depends(get_db)) -> dict[str, Any]
         record.revoked_at = datetime.now(timezone.utc)
         db.commit()
     return {"api_key_id": record.id, "revoked": True}
+
+
+def require_management_credential(
+    x_management_token: str | None = Header(default=None, alias="X-Key-Management-Token"),
+    db: Session = Depends(get_db),
+) -> APIKeyManagerCredential:
+    if not x_management_token:
+        raise HTTPException(status_code=401, detail="Key management credential required")
+    credential = db.scalar(select(APIKeyManagerCredential).where(
+        APIKeyManagerCredential.token_hash == hash_api_key(x_management_token)
+    ))
+    if credential is None:
+        raise HTTPException(status_code=401, detail="Invalid key management credential")
+    return credential
+
+
+@app.get("/auth/managed-api-keys", tags=["Key management"])
+def list_managed_api_keys(
+    credential: APIKeyManagerCredential = Depends(require_management_credential),
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List safe metadata only for keys created by the same verified access request."""
+    rows = db.scalars(select(ClientAPIKey).where(
+        ClientAPIKey.access_request_id == credential.access_request_id
+    ).order_by(ClientAPIKey.id.desc())).all()
+    now = datetime.now(timezone.utc)
+    return [{
+        "id": row.id,
+        "label": row.label,
+        "organization": row.organization,
+        "client_address": row.client_address,
+        "key_prefix": row.key_prefix,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+        "expired": bool(row.expires_at and _utc(row.expires_at) <= now),
+        "revoked": row.revoked_at is not None,
+    } for row in rows]
+
+
+@app.post("/auth/managed-api-keys/{key_id}/revoke", tags=["Key management"])
+def revoke_managed_api_key(
+    key_id: int,
+    credential: APIKeyManagerCredential = Depends(require_management_credential),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    target = db.get(ClientAPIKey, key_id)
+    if target is None or target.access_request_id != credential.access_request_id:
+        raise HTTPException(status_code=404, detail="API key not found")
+    if target.revoked_at is None:
+        target.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"api_key_id": target.id, "revoked": True}
 
 
 @app.get("/auth/verify", tags=["Authentication"])

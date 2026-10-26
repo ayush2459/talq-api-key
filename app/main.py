@@ -268,17 +268,11 @@ def request_access(payload: AccessRequestInput, db: Session = Depends(get_db)) -
 
 
 @app.post("/telegram/webhook", include_in_schema=False)
-def telegram_webhook(request: Request, db: Session = Depends(get_db), secret: str | None = Header(default=None, alias="X-Telegram-Bot-Api-Secret-Token")) -> dict[str, bool]:
+async def telegram_webhook(request: Request, db: Session = Depends(get_db), secret: str | None = Header(default=None, alias="X-Telegram-Bot-Api-Secret-Token")) -> dict[str, bool]:
     """Accept Telegram webhook updates and bind a request to the real Telegram sender."""
     if not TELEGRAM_WEBHOOK_SECRET or not secret or not secrets.compare_digest(secret, TELEGRAM_WEBHOOK_SECRET):
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
-    update = request.scope.get("_telegram_update")
-    if update is None:
-        update = getattr(request.state, "telegram_update", None)
-    if update is None:
-        # Read JSON from the request once; FastAPI Request is safe to consume here.
-        import asyncio
-        update = asyncio.run(request.json())
+    update = await request.json()
     message = update.get("message") or {}
     sender = message.get("from") or {}
     chat = message.get("chat") or {}
@@ -330,7 +324,7 @@ def telegram_webhook(request: Request, db: Session = Depends(get_db), secret: st
 
 
 @app.get("/access-requests/{request_id}/status", tags=["Access management"])
-def access_request_status(request_id: int, payload: RequestTokenInput = Depends(), db: Session = Depends(get_db), x_request_token: str | None = Header(default=None, alias="X-Request-Token")) -> dict[str, Any]:
+def access_request_status(request_id: int, db: Session = Depends(get_db), x_request_token: str | None = Header(default=None, alias="X-Request-Token")) -> dict[str, Any]:
     item = db.get(AccessRequest, request_id)
     if item is None or not x_request_token or not item.request_token_hash or not secrets.compare_digest(hash_api_key(x_request_token), item.request_token_hash):
         raise HTTPException(status_code=404, detail="Access request not found")

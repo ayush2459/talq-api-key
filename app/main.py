@@ -18,7 +18,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, sta
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select
+from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select, update
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 APP_ENV = os.getenv("APP_ENV", "production")
@@ -338,6 +338,20 @@ def issue_key_after_telegram_verification(request_id: int, payload: RequestToken
         raise HTTPException(status_code=404, detail="Access request not found")
     if item.status != "verified" or item.telegram_verified_at is None:
         raise HTTPException(status_code=409, detail="Telegram verification is not complete")
+    # Atomically claim this request so concurrent submissions cannot issue two keys.
+    claim = db.execute(
+        update(AccessRequest)
+        .where(
+            AccessRequest.id == request_id,
+            AccessRequest.status == "verified",
+            AccessRequest.request_token_hash == hash_api_key(payload.request_token),
+        )
+        .values(status="issuing")
+    )
+    if claim.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This access request has already been used or is being processed")
+    item.status = "issuing"
     record, raw_key = _new_client_key(item, db)
     db.commit()
     db.refresh(record)

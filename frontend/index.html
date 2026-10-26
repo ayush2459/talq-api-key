@@ -127,7 +127,7 @@
 <script>
 (function(){
   const $ = (id)=>document.getElementById(id);
-  const API_BASE_URL = (window.FLOWSENSE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+  const API_BASE_URL = (window.FLOWSENSE_API_BASE_URL || "https://flowsense-talq-gateway.onrender.com").replace(/\/$/, "");
   async function apiFetch(path, options={}) {
     let response;
     try { response = await fetch(API_BASE_URL + path, options); }

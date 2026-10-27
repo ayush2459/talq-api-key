@@ -203,3 +203,85 @@ def test_admin_key_listing_includes_expiration_metadata(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.json()[0]["expires_at"]
     assert response.json()[0]["expired"] is False
+
+
+
+def test_oauth_client_credentials_issues_and_accepts_bearer_token(monkeypatch, tmp_path):
+    client, main = make_client(monkeypatch, tmp_path)
+    request = submit_request(client)
+    telegram_start(client, request)
+    issued_key = client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": request["request_token"]},
+    )
+    assert issued_key.status_code == 200, issued_key.text
+
+    registered = client.post(
+        "/oauth/clients",
+        headers={"X-Admin-Key": "test-admin-secret"},
+        json={
+            "client_address": "00000000-0000-4000-8000-000000000001",
+            "label": "Test partner OAuth client",
+        },
+    )
+    assert registered.status_code == 200, registered.text
+    credentials = registered.json()
+    assert credentials["client_id"].startswith("fs_client_")
+    assert credentials["client_secret"].startswith("fs_secret_")
+    assert credentials["client_secret_shown_once"] is True
+
+    token_response = client.post(
+        "/oauth/token",
+        auth=(credentials["client_id"], credentials["client_secret"]),
+        data={"grant_type": "client_credentials", "scope": "data:read"},
+    )
+    assert token_response.status_code == 200, token_response.text
+    assert token_response.headers["cache-control"] == "no-store"
+    assert token_response.headers["pragma"] == "no-cache"
+    token = token_response.json()
+    assert token["token_type"] == "Bearer"
+    assert token["expires_in"] == 3600
+    assert token["scope"] == "data:read"
+
+    protected = client.get(
+        "/integration-status",
+        headers={"Authorization": f"Bearer {token['access_token']}"},
+    )
+    assert protected.status_code == 200, protected.text
+    assert protected.json()["authorized_organization"] == "Example Org"
+
+    invalid = client.get(
+        "/integration-status",
+        headers={"Authorization": "Bearer definitely-not-a-real-token"},
+    )
+    assert invalid.status_code == 401
+
+
+def test_oauth_token_rejects_invalid_client_and_wrong_grant(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    bad_client = client.post(
+        "/oauth/token",
+        auth=("not-a-client", "not-a-secret"),
+        data={"grant_type": "client_credentials"},
+    )
+    assert bad_client.status_code == 401
+
+    wrong_grant = client.post(
+        "/oauth/token",
+        auth=("not-a-client", "not-a-secret"),
+        data={"grant_type": "authorization_code"},
+    )
+    assert wrong_grant.status_code == 400
+
+
+def test_oauth_client_registration_requires_admin(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    response = client.post(
+        "/oauth/clients",
+        headers={"X-Admin-Key": "wrong-admin-key"},
+        json={
+            "client_address": "00000000-0000-4000-8000-000000000001",
+            "label": "Unauthorized registration",
+        },
+    )
+    assert response.status_code == 401

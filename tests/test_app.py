@@ -203,3 +203,58 @@ def test_admin_key_listing_includes_expiration_metadata(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.json()[0]["expires_at"]
     assert response.json()[0]["expired"] is False
+
+
+def test_oauth_client_credentials_grant_and_scoped_bearer_access(monkeypatch, tmp_path):
+    client, main = make_client(monkeypatch, tmp_path)
+    request = submit_request(client)
+    telegram_start(client, request)
+    issued = client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": request["request_token"]},
+    )
+    assert issued.status_code == 200, issued.text
+    manager = issued.json()["management_token"]
+    created = client.post(
+        "/auth/managed-oauth-clients",
+        headers={"X-Key-Management-Token": manager},
+        json={"name": "Analytics backend", "scopes": ["data:read", "gateway:read"]},
+    )
+    assert created.status_code == 201, created.text
+    oauth_client = created.json()
+    assert oauth_client["client_secret"].startswith("fs_secret_")
+
+    token = client.post(
+        "/oauth/token",
+        auth=(oauth_client["client_id"], oauth_client["client_secret"]),
+        data={"grant_type": "client_credentials", "scope": "data:read gateway:read"},
+    )
+    assert token.status_code == 200, token.text
+    token_body = token.json()
+    assert token_body["token_type"] == "Bearer"
+    assert token_body["expires_in"] == 3600
+    assert token_body["access_token"].startswith("fs_oauth_")
+
+    # Protected gateway read route accepts OAuth bearer tokens as well as legacy API keys.
+    headers = {"Authorization": f"Bearer {token_body['access_token']}"}
+    status_response = client.get("/integration-status", headers=headers)
+    assert status_response.status_code == 200, status_response.text
+
+    # A revoked OAuth client invalidates its existing access tokens.
+    revoked = client.post(
+        f"/auth/managed-oauth-clients/{oauth_client['id']}/revoke",
+        headers={"X-Key-Management-Token": manager},
+    )
+    assert revoked.status_code == 200, revoked.text
+    assert client.get("/integration-status", headers=headers).status_code == 401
+
+
+def test_oauth_rejects_invalid_scope_and_invalid_client(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, tmp_path)
+    response = client.post(
+        "/oauth/token",
+        auth=("unknown-client", "wrong-secret"),
+        data={"grant_type": "client_credentials"},
+    )
+    assert response.status_code == 401
+

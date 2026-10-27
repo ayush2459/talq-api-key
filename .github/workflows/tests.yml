@@ -27,4 +27,4 @@ jobs:
           TELEGRAM_BOT_TOKEN: "123456:test-bot-token"
           TELEGRAM_BOT_USERNAME: "FlowSenseTestBot"
           TELEGRAM_WEBHOOK_SECRET: "ci-test-webhook-secret"
-        run: python -m pytest -q
+        run: python -m pytest -q tests

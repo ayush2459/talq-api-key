@@ -16,7 +16,7 @@ from urllib.parse import parse_qs
 from typing import Any
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -263,7 +263,7 @@ def register_oauth_client(
 
 
 @app.post("/oauth/token", tags=["OAuth 2.0"], summary="Issue OAuth 2.0 client-credentials access token")
-async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+async def oauth_token(request: Request, response: Response, db: Session = Depends(get_db)) -> dict[str, Any]:
     """RFC 6749 client_credentials grant using HTTP Basic client authentication."""
     auth = request.headers.get("Authorization", "")
     if not auth.lower().startswith("basic "):
@@ -275,6 +275,9 @@ async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[s
     except (ValueError, UnicodeDecodeError):
         raise HTTPException(status_code=401, detail="Invalid client authentication",
                             headers={"WWW-Authenticate": "Basic"})
+    content_type = request.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+    if content_type != "application/x-www-form-urlencoded":
+        raise HTTPException(status_code=415, detail="Content-Type must be application/x-www-form-urlencoded")
     body = (await request.body()).decode("utf-8", errors="replace")
     form = parse_qs(body, keep_blank_values=True)
     if form.get("grant_type", [""])[0] != "client_credentials":
@@ -301,6 +304,8 @@ async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[s
                             scopes=" ".join(sorted(requested_scope)),
                             expires_at=now + timedelta(seconds=expires_in)))
     db.commit()
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
     return {"access_token": access_token, "token_type": "Bearer", "expires_in": expires_in,
             "scope": " ".join(sorted(requested_scope))}
 

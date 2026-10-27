@@ -795,17 +795,17 @@ def integration_status(identity: ClientIdentity = Depends(require_client_auth)) 
     }
 
 
-@app.get("/devices", dependencies=[Depends(require_api_key)])
+@app.get("/devices", dependencies=[Depends(require_client_auth)])
 def list_devices(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
     return {"devices": DEMO_DEVICES, "clientAddress": client_address}
 
 
-@app.get("/devices/count", dependencies=[Depends(require_api_key)])
+@app.get("/devices/count", dependencies=[Depends(require_client_auth)])
 def count_devices(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
     return {"count": len(DEMO_DEVICES), "clientAddress": client_address}
 
 
-@app.get("/devices/{deviceAddress}", dependencies=[Depends(require_api_key)])
+@app.get("/devices/{deviceAddress}", dependencies=[Depends(require_client_auth)])
 def get_device(deviceAddress: str, client_address: str = Depends(require_talq_headers)) -> JSONResponse:
     for device in DEMO_DEVICES:
         address = device.get("deviceAddress") or device.get("address")
@@ -814,18 +814,18 @@ def get_device(deviceAddress: str, client_address: str = Depends(require_talq_he
     raise HTTPException(status_code=404, detail="Device not found in configured gateway data")
 
 
-@app.get("/services", dependencies=[Depends(require_api_key)])
+@app.get("/services", dependencies=[Depends(require_client_auth)])
 def list_services(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
     return {"services": SERVICES, "clientAddress": client_address}
 
 
-@app.get("/services/{serviceName}", dependencies=[Depends(require_api_key)])
+@app.get("/services/{serviceName}", dependencies=[Depends(require_client_auth)])
 def get_service(serviceName: str, client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
     if serviceName not in SERVICES:
         raise HTTPException(status_code=404, detail="Service not found")
     return {"serviceName": serviceName, "available": True, "clientAddress": client_address}
 
 
-@app.get("/data-packages", dependencies=[Depends(require_api_key)])
+@app.get("/data-packages", dependencies=[Depends(require_client_auth)])
 def list_data_packages(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
     return {"dataPackages": DEMO_DATA_PACKAGES, "clientAddress": client_address}

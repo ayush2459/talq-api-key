@@ -16,6 +16,12 @@ FlowSense TALQ Gateway provides a pilot access workflow for connecting client sy
 
 The raw client API key and request token must never be logged or stored in browser storage. The dashboard stores only display metadata locally. A separate high-entropy key-management token is returned once when a key is issued; only its SHA-256 hash is stored on the server. The dashboard stores this management token in browser local storage to reload metadata and support revocation after refresh. Treat it like a password: do not share it, commit it, or use it on an untrusted device. You can connect another device by entering the management token. It is scoped to the verified email and Telegram username used for issuance, so it can manage keys created by that same verified identity across requests. It cannot access admin endpoints. The admin credential is never sent to the browser.
 
+## OAuth 2.0 integration
+
+The dashboard includes an OAuth 2.0 Applications panel for the Telegram-verified owner. It creates confidential OAuth clients linked to the same verified integration and client UUID. The client secret is returned once and only its hash is stored. Server-side integrations exchange credentials at `POST /oauth/token` using the OAuth 2.0 `client_credentials` grant and receive a one-hour opaque Bearer access token.
+
+Scopes are restricted to `data:read` and `gateway:read`. Use `Authorization: Bearer <access_token>` on supported read-only gateway routes; legacy `X-API-Key` access remains supported. Revoking an OAuth client revokes its outstanding access tokens. Do not place client secrets in frontend code. See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for token exchange examples.
+
 ## API endpoints
 
 ### Public

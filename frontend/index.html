@@ -46,6 +46,10 @@
         <div class="panel-head"><div><h2>Your credentials</h2><p>Secrets are only shown at creation time in the planned production flow.</p></div><input class="search" id="searchInput" type="search" placeholder="Search by name or client UUID" aria-label="Search API keys"></div>
         <div id="tableArea"></div>
       </section>
+      <section class="panel" id="oauthPanel" style="margin-top:22px">
+        <div class="panel-head"><div><h2>OAuth 2.0 Applications</h2><p>Create confidential client credentials for server-to-server integrations. Client secrets are displayed once.</p></div><button class="btn btn-primary" id="createOAuthBtn">＋ Create OAuth Client</button></div>
+        <div id="oauthTableArea"><div class="empty"><div class="empty-icon">⛨</div><h3>Connect your key manager</h3><p>Use the management token issued after Telegram verification to create and manage OAuth clients.</p><button class="btn btn-secondary" id="connectOAuthManagerBtn">Connect key manager</button></div></div>
+      </section>
       <div class="notice"><span class="notice-icon">ⓘ</span><div><strong>Keep your credentials safe.</strong> Never share an API key publicly or commit it to source control. In the completed application, the backend will store only a hash of each key and enforce expiry and revocation.</div></div>
       <p class="footer-note">FlowSense TALQ Gateway · Backend-connected console · Key metadata is kept in memory for this browser session only.</p>
       <section class="docs-page" id="docsPage" aria-label="Official TALQ specification">
@@ -158,6 +162,44 @@
       console.warn("Could not refresh backend key metadata:",error.message);
     }
   }
+  async function refreshOAuthClients(){
+    const area=$("oauthTableArea"); if(!area) return;
+    if(!managerToken){ area.innerHTML='<div class="empty"><div class="empty-icon">⛨</div><h3>Connect your key manager</h3><p>Use the management token issued after Telegram verification to manage OAuth clients.</p><button class="btn btn-secondary" id="connectOAuthManagerBtn">Connect key manager</button></div>'; const b=$("connectOAuthManagerBtn");if(b)b.onclick=connectManagerToken;return; }
+    try{
+      const rows=await apiFetch("/auth/managed-oauth-clients",{headers:{"X-Key-Management-Token":managerToken}});
+      if(!rows.length){area.innerHTML='<div class="empty"><div class="empty-icon">⛨</div><h3>No OAuth clients yet</h3><p>Create an OAuth client for a server-side integration. Keep its client secret out of browser applications and source control.</p></div>';return;}
+      area.innerHTML='<div class="table-wrap"><table><thead><tr><th>Application</th><th>Client ID</th><th>Client address</th><th>Scopes</th><th>Status</th><th>Action</th></tr></thead><tbody>'+rows.map(r=>'<tr><td><div class="key-name">'+esc(r.name)+'</div><div class="key-sub">'+esc(r.organization)+'</div></td><td class="mono">'+esc(r.client_id)+'</td><td class="mono">'+esc(r.client_address)+'</td><td>'+esc((r.scopes||[]).join(", "))+'</td><td><span class="status '+(r.revoked?'revoked-status':'active-status')+'">'+(r.revoked?'Revoked':'Active')+'</span></td><td><button class="btn btn-danger" data-oauth-revoke="'+esc(r.id)+'" '+(r.revoked?'disabled':'')+'>Revoke</button></td></tr>').join('')+'</tbody></table></div>';
+      area.querySelectorAll("[data-oauth-revoke]").forEach(b=>b.onclick=()=>revokeOAuthClient(b.dataset.oauthRevoke));
+    }catch(error){
+      area.innerHTML='<div class="empty"><h3>Could not load OAuth clients</h3><p>'+esc(error.message)+'</p><button class="btn btn-secondary" id="retryOAuthLoad">Retry</button></div>';
+      const retry=$("retryOAuthLoad");if(retry)retry.onclick=refreshOAuthClients;
+    }
+  }
+  async function createOAuthClient(){
+    if(!managerToken){toast("Connect your key manager first.");connectManagerToken();return;}
+    const name=window.prompt("Name for this OAuth application (for example, FlowSense Analytics Backend):");
+    if(name===null)return;
+    if(name.trim().length<2){toast("Enter an application name of at least 2 characters.");return;}
+    try{
+      const result=await apiFetch("/auth/managed-oauth-clients",{method:"POST",headers:{"Content-Type":"application/json","X-Key-Management-Token":managerToken},body:JSON.stringify({name:name.trim(),scopes:["data:read","gateway:read"]})});
+      showOAuthClientSecret(result);
+      await refreshOAuthClients();
+    }catch(error){toast(error.message);}
+  }
+  function showOAuthClientSecret(client){
+    const tokenUrl=API_BASE_URL+"/oauth/token";
+    const ps='$pair = $env:OAUTH_CLIENT_ID + ":" + $env:OAUTH_CLIENT_SECRET\n$basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pair))\n$form = @{ grant_type = "client_credentials"; scope = "'+client.scopes.join(" ")+'" }\n$token = Invoke-RestMethod -Method Post -Uri "'+tokenUrl+'" -Headers @{ Authorization = "Basic $basic" } -ContentType "application/x-www-form-urlencoded" -Body $form\n$headers = @{ Authorization = "Bearer $($token.access_token)" }\nInvoke-RestMethod -Uri "'+API_BASE_URL+'/data/facilities?clientAddress='+client.client_address+'" -Headers $headers';
+    const curl='curl -X POST "'+tokenUrl+'" -u "'+client.client_id+':<CLIENT_SECRET>" -H "Content-Type: application/x-www-form-urlencoded" -d "grant_type=client_credentials&scope='+encodeURIComponent(client.scopes.join(" "))+'"';
+    modal('<div class="modal-head"><div><h2>OAuth client created</h2><p>Save the client secret now; the server stores only its hash.</p></div><button class="close" id="closeOAuthSecret">×</button></div><div class="modal-body"><div class="notice warn"><div><strong>Confidential client only.</strong><br>Never put the client secret in frontend JavaScript, a public repository, or a browser app. Use it only in a trusted server-side application.</div></div><div class="metadata"><span>Application</span><span>'+esc(client.name)+'</span><span>Client ID</span><span>'+esc(client.client_id)+'</span><span>Client secret</span><span><code id="oauthSecretValue">'+esc(client.client_secret)+'</code></span><span>Client address</span><span>'+esc(client.client_address)+'</span><span>Token URL</span><span>'+esc(tokenUrl)+'</span><span>Scopes</span><span>'+esc(client.scopes.join(" "))+'</span></div><div class="modal-actions"><button class="btn btn-secondary" id="copyOAuthClientId">Copy client ID</button><div class="right"><button class="btn btn-secondary" id="copyOAuthSecret">Copy secret</button><button class="btn btn-primary" id="closeOAuthDone">Done</button></div></div><h3 style="margin-top:20px">PowerShell token request</h3><p class="sub">Save the values securely as environment variables in your backend, then run this example. A token expires after 3600 seconds.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1424;color:#e7effa;border-radius:9px;padding:13px;font-size:11px">'+esc('$env:OAUTH_CLIENT_ID = "'+client.client_id+'"\n$env:OAUTH_CLIENT_SECRET = Read-Host "OAuth client secret"\n'+ps)+'</pre></div>',true);
+    $("closeOAuthSecret").onclick=closeModal;$("closeOAuthDone").onclick=closeModal;
+    $("copyOAuthClientId").onclick=async()=>{try{await navigator.clipboard.writeText(client.client_id);toast("Client ID copied.")}catch{toast("Copy the client ID manually.")}};
+    $("copyOAuthSecret").onclick=async()=>{try{await navigator.clipboard.writeText(client.client_secret);toast("Secret copied. Store it in a secret manager.")}catch{toast("Copy the secret manually.")}};
+  }
+  async function revokeOAuthClient(id){
+    if(!window.confirm("Revoke this OAuth client? Existing access tokens will be revoked too."))return;
+    try{await apiFetch("/auth/managed-oauth-clients/"+encodeURIComponent(id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});toast("OAuth client and its tokens revoked.");await refreshOAuthClients();}
+    catch(error){toast(error.message);}
+  }
   function connectManagerToken(){
     modal('<div class="modal-head"><div><h2>Connect key manager</h2><p>Use your management token to load your keys on this device.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="field full"><label for="managerTokenInput">Management token</label><input id="managerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_…"><div class="hint">This credential can list and revoke keys in its access-request scope. Keep it private.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManager">Cancel</button><div class="right"><button class="btn btn-primary" id="saveManager">Connect</button></div></div></div>');
     $("closeModal").onclick=closeModal;$("cancelManager").onclick=closeModal;
@@ -169,7 +211,7 @@
         managerToken=value;localStorage.setItem(MANAGER_TOKEN_KEY,value);
         const byId=new Map(keys.map(k=>[String(k.id),k]));
         keys=rows.map(row=>{const old=byId.get(String(row.id))||{};return {...old,id:row.id,name:row.label,organization:row.organization,clientAddress:row.client_address,prefix:row.key_prefix,createdAt:row.created_at?new Date(row.created_at):new Date(),expiresAt:row.expires_at?new Date(row.expires_at):null,status:row.revoked?"Revoked":row.expired?"Expired":"Active",apiKey:old.apiKey||null,mode:"Live backend"};});
-        persistKeys();closeModal();render();toast("Backend key metadata connected.");
+        persistKeys();closeModal();render();toast("Backend credentials connected.");refreshOAuthClients();
       }catch(error){toast(error.message);b.disabled=false;b.textContent="Connect";}
     };
   }
@@ -363,9 +405,11 @@
     else if(b.textContent.includes("Support")){showPage("keys");toast("Support links will be added during backend integration.")}
   }));
   $("createBtn").addEventListener("click",openCreate);$("searchInput").addEventListener("input",render);
+  const createOAuthBtn=$("createOAuthBtn");if(createOAuthBtn)createOAuthBtn.onclick=createOAuthClient;
   document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
   render();
   refreshManagedKeys();
+  refreshOAuthClients();
 })();
 </script>
 </body>

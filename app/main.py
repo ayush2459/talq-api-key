@@ -3,6 +3,8 @@
 This is a pilot access-management flow, not a complete TALQ implementation.
 """
 import hashlib
+import base64
+import binascii
 import hmac
 import os
 import re
@@ -82,6 +84,33 @@ class APIKeyManagerCredential(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+class OAuthClient(Base):
+    """OAuth 2.0 client-credentials application owned by a Telegram-verified account."""
+    __tablename__ = "oauth_clients"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    access_request_id: Mapped[int] = mapped_column(ForeignKey("access_requests.id"), index=True)
+    client_id: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    client_secret_hash: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(120))
+    organization: Mapped[str] = mapped_column(String(160))
+    client_address: Mapped[str] = mapped_column(String(160), index=True)
+    scopes: Mapped[str] = mapped_column(String(255), default="data:read gateway:read")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OAuthAccessToken(Base):
+    """Opaque OAuth bearer token; only its SHA-256 hash is stored."""
+    __tablename__ = "oauth_access_tokens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    oauth_client_id: Mapped[int] = mapped_column(ForeignKey("oauth_clients.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    scopes: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ClientAPIKey(Base):
     __tablename__ = "client_api_keys"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -145,6 +174,56 @@ def require_api_key(
     return record
 
 
+class ClientIdentity:
+    """Normalized identity for either a legacy API key or an OAuth bearer token."""
+    def __init__(self, organization: str, client_address: str, auth_type: str, credential_id: int):
+        self.organization = organization
+        self.client_address = client_address
+        self.auth_type = auth_type
+        self.credential_id = credential_id
+
+
+def require_client_auth(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    db: Session = Depends(get_db),
+    request: Request = None,
+) -> ClientIdentity:
+    """Authorize existing API keys or OAuth bearer tokens for gateway read routes."""
+    if authorization and x_api_key:
+        raise HTTPException(status_code=400, detail="Send either Authorization: Bearer or X-API-Key, not both")
+    now = datetime.now(timezone.utc)
+    if x_api_key:
+        record = db.scalar(select(ClientAPIKey).where(ClientAPIKey.key_hash == hash_api_key(x_api_key)))
+        if record is None or record.revoked_at is not None:
+            raise HTTPException(status_code=401, detail="Invalid or revoked API key")
+        expires_at = _utc(record.expires_at)
+        if expires_at is not None and expires_at <= now:
+            raise HTTPException(status_code=401, detail="API key expired; request a new key")
+        return ClientIdentity(record.organization, record.client_address, "api_key", record.id)
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="OAuth bearer token or X-API-Key required")
+    raw_token = authorization[7:].strip()
+    if not raw_token:
+        raise HTTPException(status_code=401, detail="Bearer token required")
+    token = db.scalar(select(OAuthAccessToken).where(OAuthAccessToken.token_hash == hash_api_key(raw_token)))
+    if token is None or token.revoked_at is not None or _utc(token.expires_at) <= now:
+        raise HTTPException(status_code=401, detail="Invalid, expired, or revoked access token")
+    client = db.get(OAuthClient, token.oauth_client_id)
+    if client is None or client.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="OAuth client is revoked or unavailable")
+    token_scopes = set((token.scopes or "").split())
+    path = request.url.path if request is not None else ""
+    if path.startswith("/data/"):
+        required_scope = "data:read"
+    else:
+        required_scope = "gateway:read"
+    if required_scope not in token_scopes:
+        raise HTTPException(status_code=403, detail=f"OAuth token lacks required scope: {required_scope}")
+    return ClientIdentity(client.organization, client.client_address, "oauth", client.id)
+
+
 def require_admin_key(x_admin_key: str | None = Header(default=None, alias="X-Admin-Key")) -> None:
     if not ADMIN_API_KEY:
         raise HTTPException(status_code=503, detail="Admin access is not configured. Set ADMIN_API_KEY.")
@@ -155,13 +234,13 @@ def require_admin_key(x_admin_key: str | None = Header(default=None, alias="X-Ad
 def require_talq_headers(
     talq_api_version: str | None = Header(default=None, alias="talq-api-version"),
     client_address: UUID = Query(..., alias="clientAddress", description="UUID address of the CMS as required by TALQ 2.7.1"),
-    api_key: ClientAPIKey = Depends(require_api_key),
+    identity: ClientIdentity = Depends(require_client_auth),
 ) -> str:
     if talq_api_version != "2.7.1":
         raise HTTPException(status_code=400, detail="talq-api-version must be 2.7.1")
     client_address_text = str(client_address)
-    if client_address_text != api_key.client_address:
-        raise HTTPException(status_code=403, detail="clientAddress does not match the approved API key")
+    if client_address_text != identity.client_address:
+        raise HTTPException(status_code=403, detail="clientAddress does not match the approved client credential")
     if EXPECTED_CLIENT_ADDRESS and client_address_text != EXPECTED_CLIENT_ADDRESS:
         raise HTTPException(status_code=403, detail="Unapproved clientAddress")
     return client_address_text
@@ -516,6 +595,160 @@ def revoke_managed_api_key(
     return {"api_key_id": target.id, "revoked": True}
 
 
+class OAuthClientCreateInput(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    scopes: list[str] = Field(default_factory=lambda: ["data:read", "gateway:read"])
+
+
+def _oauth_client_payload(row: OAuthClient) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "client_id": row.client_id,
+        "name": row.name,
+        "organization": row.organization,
+        "client_address": row.client_address,
+        "scopes": (row.scopes or "").split(),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "revoked": row.revoked_at is not None,
+    }
+
+
+@app.post("/auth/managed-oauth-clients", status_code=201, tags=["OAuth 2.0"])
+def create_managed_oauth_client(
+    payload: OAuthClientCreateInput,
+    credential: APIKeyManagerCredential = Depends(require_management_credential),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Create an OAuth client for the Telegram-verified owner's integration."""
+    allowed = {"data:read", "gateway:read"}
+    requested = set(payload.scopes)
+    if not requested or not requested.issubset(allowed):
+        raise HTTPException(status_code=422, detail="Supported scopes are data:read and gateway:read")
+    owner_request = db.get(AccessRequest, credential.access_request_id)
+    if (
+        owner_request is None
+        or owner_request.email != credential.owner_email
+        or (owner_request.telegram_username or "").lower() != credential.telegram_username
+    ):
+        raise HTTPException(status_code=403, detail="Management credential is not bound to a verified owner")
+    client_id = "fs_client_" + secrets.token_urlsafe(18)
+    client_secret = "fs_secret_" + secrets.token_urlsafe(36)
+    row = OAuthClient(
+        access_request_id=owner_request.id,
+        client_id=client_id,
+        client_secret_hash=hash_api_key(client_secret),
+        name=payload.name.strip(),
+        organization=owner_request.organization,
+        client_address=owner_request.client_address,
+        scopes=" ".join(sorted(requested)),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        **_oauth_client_payload(row),
+        "client_secret": client_secret,
+        "warning": "Copy the client secret now. It is shown once; only its hash is stored.",
+        "token_url": f"{PUBLIC_BASE_URL}/oauth/token",
+    }
+
+
+@app.get("/auth/managed-oauth-clients", tags=["OAuth 2.0"])
+def list_managed_oauth_clients(
+    credential: APIKeyManagerCredential = Depends(require_management_credential),
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    rows = db.scalars(
+        select(OAuthClient)
+        .join(AccessRequest, OAuthClient.access_request_id == AccessRequest.id)
+        .where(
+            AccessRequest.email == credential.owner_email,
+            AccessRequest.telegram_username == credential.telegram_username,
+        )
+        .order_by(OAuthClient.id.desc())
+    ).all()
+    return [_oauth_client_payload(row) for row in rows]
+
+
+@app.post("/auth/managed-oauth-clients/{client_pk}/revoke", tags=["OAuth 2.0"])
+def revoke_managed_oauth_client(
+    client_pk: int,
+    credential: APIKeyManagerCredential = Depends(require_management_credential),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    row = db.get(OAuthClient, client_pk)
+    if row is None:
+        raise HTTPException(status_code=404, detail="OAuth client not found")
+    owner_request = db.get(AccessRequest, row.access_request_id)
+    if (
+        owner_request is None
+        or owner_request.email != credential.owner_email
+        or owner_request.telegram_username != credential.telegram_username
+    ):
+        raise HTTPException(status_code=404, detail="OAuth client not found")
+    if row.revoked_at is None:
+        row.revoked_at = datetime.now(timezone.utc)
+        db.execute(
+            update(OAuthAccessToken)
+            .where(OAuthAccessToken.oauth_client_id == row.id, OAuthAccessToken.revoked_at.is_(None))
+            .values(revoked_at=datetime.now(timezone.utc))
+        )
+        db.commit()
+    return {"client_id": row.client_id, "revoked": True}
+
+
+@app.post("/oauth/token", tags=["OAuth 2.0"])
+async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """OAuth 2.0 client_credentials grant using HTTP Basic client authentication."""
+    content_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+    if content_type != "application/x-www-form-urlencoded":
+        raise HTTPException(status_code=415, detail="Use application/x-www-form-urlencoded")
+    try:
+        form = await request.form()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid form body") from exc
+    if form.get("grant_type") != "client_credentials":
+        raise HTTPException(status_code=400, detail="unsupported_grant_type")
+    client_id = ""
+    client_secret = ""
+    authorization = request.headers.get("authorization", "")
+    if authorization.lower().startswith("basic "):
+        try:
+            decoded = base64.b64decode(authorization[6:].strip(), validate=True).decode("utf-8")
+            client_id, client_secret = decoded.split(":", 1)
+        except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
+            raise HTTPException(status_code=401, detail="invalid_client") from exc
+    else:
+        client_id = str(form.get("client_id") or "")
+        client_secret = str(form.get("client_secret") or "")
+    client = db.scalar(select(OAuthClient).where(OAuthClient.client_id == client_id))
+    if (
+        client is None or client.revoked_at is not None
+        or not secrets.compare_digest(client.client_secret_hash, hash_api_key(client_secret))
+    ):
+        raise HTTPException(status_code=401, detail="invalid_client", headers={"WWW-Authenticate": 'Basic realm="oauth/token"'})
+    requested_scopes = set(str(form.get("scope") or client.scopes).split())
+    allowed_scopes = set((client.scopes or "").split())
+    if not requested_scopes or not requested_scopes.issubset(allowed_scopes):
+        raise HTTPException(status_code=400, detail="invalid_scope")
+    raw_token = "fs_oauth_" + secrets.token_urlsafe(40)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=3600)
+    db.add(OAuthAccessToken(
+        oauth_client_id=client.id,
+        token_hash=hash_api_key(raw_token),
+        scopes=" ".join(sorted(requested_scopes)),
+        created_at=datetime.now(timezone.utc),
+        expires_at=expires_at,
+    ))
+    db.commit()
+    return {
+        "access_token": raw_token,
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "scope": " ".join(sorted(requested_scopes)),
+    }
+
+
 @app.get("/auth/verify", tags=["Authentication"])
 def verify_api_key(api_key: ClientAPIKey = Depends(require_api_key)) -> dict[str, Any]:
     """Verify a client credential and return safe metadata for the authenticated integration."""
@@ -547,12 +780,12 @@ def revoke_own_api_key(
     return {"api_key_id": target.id, "revoked": True}
 
 
-@app.get("/integration-status", dependencies=[Depends(require_api_key)])
-def integration_status(api_key: ClientAPIKey = Depends(require_api_key)) -> dict[str, Any]:
+@app.get("/integration-status", dependencies=[Depends(require_client_auth)])
+def integration_status(identity: ClientIdentity = Depends(require_client_auth)) -> dict[str, Any]:
     return {
         "status": "pilot",
         "demo_mode": DEMO_MODE,
-        "authorized_organization": api_key.organization,
+        "authorized_organization": identity.organization,
         "device_count": len(DEMO_DEVICES),
         "data_package_count": len(DEMO_DATA_PACKAGES),
         "notes": [

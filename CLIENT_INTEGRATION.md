@@ -72,3 +72,20 @@ Administrators can separately list key metadata and revoke keys using `X-Admin-K
 Configure `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and `TELEGRAM_WEBHOOK_SECRET` as backend secrets. The Telegram webhook URL must be publicly reachable over HTTPS. Configure `FRONTEND_ORIGINS` with the exact origin serving the browser UI; CORS is not authentication.
 
 The current gateway is a pilot scaffold. Device and data-package lists are placeholders until real FlowSense data is mapped, and the project is not TALQ-certified.
+
+
+## OAuth 2.0 client credentials
+
+The verified dashboard owner can create a confidential OAuth client from the **OAuth 2.0 Applications** panel. The client secret is returned once; only its SHA-256 hash is persisted. Exchange it from a trusted backend using HTTP Basic authentication:
+
+```http
+POST /oauth/token
+Authorization: Basic base64(client_id:client_secret)
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&scope=data%3Aread%20gateway%3Aread
+```
+
+The response contains an opaque bearer access token valid for 3600 seconds. Only the token hash is stored. Use `Authorization: Bearer <access_token>` for protected read APIs. Data endpoints require `data:read`; other protected gateway read routes require `gateway:read`. The token is bound to the client UUID and must be accompanied by the required `clientAddress` query parameter and `talq-api-version: 2.7.1` header where the TALQ route requires them. Revoking an OAuth client also revokes its active access tokens. Existing `X-API-Key` clients remain supported.
+
+Do not store an OAuth client secret in browser JavaScript or a public client. The dashboard is only the credential-management console; token exchange should happen server-to-server.

@@ -4,6 +4,7 @@ This is a pilot access-management flow, not a complete TALQ implementation.
 """
 import hashlib
 import hmac
+import base64
 import os
 import re
 import secrets
@@ -11,6 +12,7 @@ import json
 from urllib.error import URLError, HTTPError
 from urllib.request import Request as URLRequest, urlopen
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs
 from typing import Any
 from uuid import UUID
 
@@ -97,6 +99,29 @@ class ClientAPIKey(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc) + timedelta(days=API_KEY_LIFETIME_DAYS), index=True)
 
 
+class OAuthClient(Base):
+    __tablename__ = "oauth_clients"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    client_secret_hash: Mapped[str] = mapped_column(String(64))
+    api_key_id: Mapped[int] = mapped_column(ForeignKey("client_api_keys.id"), index=True)
+    label: Mapped[str] = mapped_column(String(160))
+    scopes: Mapped[str] = mapped_column(String(500), default="data:read")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OAuthAccessToken(Base):
+    __tablename__ = "oauth_access_tokens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    oauth_client_id: Mapped[int] = mapped_column(ForeignKey("oauth_clients.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    scopes: Mapped[str] = mapped_column(String(500), default="data:read")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -109,7 +134,7 @@ app.add_middleware(
     allow_origins=FRONTEND_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key", "X-Admin-Key", "X-Request-Token", "X-Key-Management-Token", "X-Telegram-Bot-Api-Secret-Token", "talq-api-version"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Admin-Key", "X-Request-Token", "X-Key-Management-Token", "X-Telegram-Bot-Api-Secret-Token", "talq-api-version"],
 )
 
 # Deliberately empty until real FlowSense device data is mapped and validated.
@@ -132,16 +157,35 @@ def hash_api_key(raw_key: str) -> str:
 
 def require_api_key(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
     db: Session = Depends(get_db),
 ) -> ClientAPIKey:
+    """Accept either a legacy API key or a valid OAuth Bearer access token."""
+    now = datetime.now(timezone.utc)
+    if authorization and authorization.lower().startswith("bearer "):
+        raw_token = authorization[7:].strip()
+        if not raw_token:
+            raise HTTPException(status_code=401, detail="Bearer token required")
+        token = db.scalar(select(OAuthAccessToken).where(OAuthAccessToken.token_hash == hash_api_key(raw_token)))
+        if token is None or token.revoked_at is not None or (_utc(token.expires_at) or now) <= now:
+            raise HTTPException(status_code=401, detail="Invalid or expired access token", headers={"WWW-Authenticate": "Bearer"})
+        oauth_client = db.get(OAuthClient, token.oauth_client_id)
+        if oauth_client is None or oauth_client.revoked_at is not None:
+            raise HTTPException(status_code=401, detail="OAuth client is revoked", headers={"WWW-Authenticate": "Bearer"})
+        if "data:read" not in set((token.scopes or "").split()):
+            raise HTTPException(status_code=403, detail="Access token lacks required scope: data:read")
+        record = db.get(ClientAPIKey, oauth_client.api_key_id)
+        if record is None or record.revoked_at is not None or (_utc(record.expires_at) or now) <= now:
+            raise HTTPException(status_code=401, detail="Underlying API client is revoked or expired", headers={"WWW-Authenticate": "Bearer"})
+        return record
     if not x_api_key:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key required")
+        raise HTTPException(status_code=401, detail="API key or OAuth Bearer token required")
     record = db.scalar(select(ClientAPIKey).where(ClientAPIKey.key_hash == hash_api_key(x_api_key)))
     if record is None or record.revoked_at is not None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
+        raise HTTPException(status_code=401, detail="Invalid or revoked API key")
     expires_at = _utc(record.expires_at)
-    if expires_at is not None and expires_at <= datetime.now(timezone.utc):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired; request a new key")
+    if expires_at is not None and expires_at <= now:
+        raise HTTPException(status_code=401, detail="API key expired; request a new key")
     return record
 
 
@@ -183,6 +227,100 @@ def validate_email(email: str) -> bool:
 @app.get("/health", include_in_schema=False)
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "FlowSense TALQ Gateway", "environment": APP_ENV}
+
+
+class OAuthClientRegistration(BaseModel):
+    client_address: UUID = Field(description="Existing approved TALQ clientAddress")
+    label: str = Field(min_length=2, max_length=160)
+
+
+@app.post("/oauth/clients", tags=["OAuth 2.0"], summary="Register OAuth credentials for an existing approved client")
+def register_oauth_client(
+    payload: OAuthClientRegistration,
+    _: None = Depends(require_admin_key),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Admin-only bootstrap: bind OAuth credentials to an already approved, active API client."""
+    now = datetime.now(timezone.utc)
+    candidates = db.scalars(select(ClientAPIKey).where(
+        ClientAPIKey.client_address == str(payload.client_address)
+    ).order_by(ClientAPIKey.created_at.desc())).all()
+    api_client = next((item for item in candidates
+                       if item.revoked_at is None and (_utc(item.expires_at) or now) > now), None)
+    if api_client is None:
+        raise HTTPException(status_code=404, detail="No active approved API client found for this clientAddress")
+    client_id = "fs_client_" + secrets.token_urlsafe(18)
+    client_secret = "fs_secret_" + secrets.token_urlsafe(36)
+    client = OAuthClient(client_id=client_id, client_secret_hash=hash_api_key(client_secret),
+                         api_key_id=api_client.id, label=payload.label.strip(), scopes="data:read")
+    db.add(client)
+    db.commit()
+    db.refresh(client)
+    return {"client_id": client.client_id, "client_secret": client_secret,
+            "token_endpoint": f"{PUBLIC_BASE_URL}/oauth/token",
+            "grant_type": "client_credentials", "scope": "data:read",
+            "client_secret_shown_once": True}
+
+
+@app.post("/oauth/token", tags=["OAuth 2.0"], summary="Issue OAuth 2.0 client-credentials access token")
+async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """RFC 6749 client_credentials grant using HTTP Basic client authentication."""
+    auth = request.headers.get("Authorization", "")
+    if not auth.lower().startswith("basic "):
+        raise HTTPException(status_code=401, detail="Client authentication required using HTTP Basic",
+                            headers={"WWW-Authenticate": "Basic"})
+    try:
+        decoded = base64.b64decode(auth.split(" ", 1)[1], validate=True).decode("utf-8")
+        client_id, client_secret = decoded.split(":", 1)
+    except (ValueError, UnicodeDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid client authentication",
+                            headers={"WWW-Authenticate": "Basic"})
+    body = (await request.body()).decode("utf-8", errors="replace")
+    form = parse_qs(body, keep_blank_values=True)
+    if form.get("grant_type", [""])[0] != "client_credentials":
+        raise HTTPException(status_code=400, detail="grant_type must be client_credentials")
+    requested_scope = set(form.get("scope", ["data:read"])[0].split())
+    client = db.scalar(select(OAuthClient).where(OAuthClient.client_id == client_id))
+    if client is None or client.revoked_at is not None or not secrets.compare_digest(
+        client.client_secret_hash if client else "0" * 64, hash_api_key(client_secret)
+    ):
+        raise HTTPException(status_code=401, detail="Invalid client credentials",
+                            headers={"WWW-Authenticate": "Basic"})
+    allowed_scopes = set((client.scopes or "").split())
+    if not requested_scope:
+        requested_scope = allowed_scopes
+    if not requested_scope.issubset(allowed_scopes):
+        raise HTTPException(status_code=400, detail="Requested scope is not permitted for this client")
+    api_client = db.get(ClientAPIKey, client.api_key_id)
+    now = datetime.now(timezone.utc)
+    if api_client is None or api_client.revoked_at is not None or (_utc(api_client.expires_at) or now) <= now:
+        raise HTTPException(status_code=401, detail="Associated API client is revoked or expired")
+    access_token = secrets.token_urlsafe(48)
+    expires_in = 3600
+    db.add(OAuthAccessToken(oauth_client_id=client.id, token_hash=hash_api_key(access_token),
+                            scopes=" ".join(sorted(requested_scope)),
+                            expires_at=now + timedelta(seconds=expires_in)))
+    db.commit()
+    return {"access_token": access_token, "token_type": "Bearer", "expires_in": expires_in,
+            "scope": " ".join(sorted(requested_scope))}
+
+
+@app.post("/oauth/clients/{client_id}/revoke", tags=["OAuth 2.0"], summary="Revoke an OAuth client")
+def revoke_oauth_client(client_id: str, _: None = Depends(require_admin_key),
+                        db: Session = Depends(get_db)) -> dict[str, str]:
+    client = db.scalar(select(OAuthClient).where(OAuthClient.client_id == client_id))
+    if client is None:
+        raise HTTPException(status_code=404, detail="OAuth client not found")
+    now = datetime.now(timezone.utc)
+    client.revoked_at = now
+    tokens = db.scalars(select(OAuthAccessToken).where(
+        OAuthAccessToken.oauth_client_id == client.id, OAuthAccessToken.revoked_at.is_(None)
+    )).all()
+    for token in tokens:
+        token.revoked_at = now
+    db.commit()
+    return {"status": "revoked", "client_id": client_id}
+
 
 
 def telegram_api(method: str, payload: dict[str, Any]) -> dict[str, Any]:

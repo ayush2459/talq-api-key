@@ -371,7 +371,7 @@
     $("closeModal").onclick=closeModal;$("closeWithoutSave").onclick=closeModal;
     $("copySecret").onclick=async()=>{try{await navigator.clipboard.writeText(secret);toast("API key copied. Store it securely and never commit it to source control.")}catch{toast("Clipboard unavailable — select and copy the key manually.")}};
     if(managementToken&&$("copyManagerSecret"))$("copyManagerSecret").onclick=async()=>{try{await navigator.clipboard.writeText(managementToken);toast("Management token copied. Keep it private.")}catch{toast("Clipboard unavailable — select and copy the management token manually.")}};
-    $("finishDemo").onclick=()=>{persistKeys();currentSecret=null;closeModal();render();toast("Key details saved in this browser. The full secret is not stored.")};
+    $("finishDemo").onclick=()=>{persistKeys();currentSecret=null;closeModal();render();refreshOAuthClients();toast("Key details saved in this browser. The full secret is not stored.")};
   }
   function confirmRevoke(id){
     const k=keys.find(x=>x.id===id);if(!k)return;

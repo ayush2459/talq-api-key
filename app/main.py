@@ -138,7 +138,7 @@ app.add_middleware(
     allow_origins=FRONTEND_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key", "X-Admin-Key", "X-Request-Token", "X-Key-Management-Token", "X-Telegram-Bot-Api-Secret-Token", "talq-api-version"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Admin-Key", "X-Request-Token", "X-Key-Management-Token", "X-Telegram-Bot-Api-Secret-Token", "talq-api-version"],
 )
 
 # Deliberately empty until real FlowSense device data is mapped and validated.

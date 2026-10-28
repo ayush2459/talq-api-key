@@ -85,15 +85,13 @@ class APIKeyManagerCredential(Base):
 
 
 class OAuthClient(Base):
-    """OAuth 2.0 client-credentials application owned by a Telegram-verified account."""
+    """OAuth client linked to an issued API key; matches the existing database schema."""
     __tablename__ = "oauth_clients"
     id: Mapped[int] = mapped_column(primary_key=True)
-    access_request_id: Mapped[int] = mapped_column(ForeignKey("access_requests.id"), index=True)
     client_id: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     client_secret_hash: Mapped[str] = mapped_column(String(64))
-    name: Mapped[str] = mapped_column(String(120))
-    organization: Mapped[str] = mapped_column(String(160))
-    client_address: Mapped[str] = mapped_column(String(160), index=True)
+    api_key_id: Mapped[int] = mapped_column(ForeignKey("client_api_keys.id"), index=True)
+    label: Mapped[str] = mapped_column(String(120))
     scopes: Mapped[str] = mapped_column(String(255), default="data:read gateway:read")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -213,6 +211,9 @@ def require_client_auth(
     client = db.get(OAuthClient, token.oauth_client_id)
     if client is None or client.revoked_at is not None:
         raise HTTPException(status_code=401, detail="OAuth client is revoked or unavailable")
+    client_api_key = db.get(ClientAPIKey, client.api_key_id)
+    if client_api_key is None:
+        raise HTTPException(status_code=401, detail="OAuth client owner is unavailable")
     token_scopes = set((token.scopes or "").split())
     path = request.url.path if request is not None else ""
     if path.startswith("/data/"):
@@ -221,7 +222,7 @@ def require_client_auth(
         required_scope = "gateway:read"
     if required_scope not in token_scopes:
         raise HTTPException(status_code=403, detail=f"OAuth token lacks required scope: {required_scope}")
-    return ClientIdentity(client.organization, client.client_address, "oauth", client.id)
+    return ClientIdentity(client_api_key.organization, client_api_key.client_address, "oauth", client.id)
 
 
 def require_admin_key(x_admin_key: str | None = Header(default=None, alias="X-Admin-Key")) -> None:
@@ -600,13 +601,13 @@ class OAuthClientCreateInput(BaseModel):
     scopes: list[str] = Field(default_factory=lambda: ["data:read", "gateway:read"])
 
 
-def _oauth_client_payload(row: OAuthClient) -> dict[str, Any]:
+def _oauth_client_payload(row: OAuthClient, api_key: ClientAPIKey) -> dict[str, Any]:
     return {
         "id": row.id,
         "client_id": row.client_id,
-        "name": row.name,
-        "organization": row.organization,
-        "client_address": row.client_address,
+        "name": row.label,
+        "organization": api_key.organization,
+        "client_address": api_key.client_address,
         "scopes": (row.scopes or "").split(),
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "revoked": row.revoked_at is not None,
@@ -631,22 +632,33 @@ def create_managed_oauth_client(
         or (owner_request.telegram_username or "").lower() != credential.telegram_username
     ):
         raise HTTPException(status_code=403, detail="Management credential is not bound to a verified owner")
+    now = datetime.now(timezone.utc)
+    owner_api_key = db.scalars(
+        select(ClientAPIKey)
+        .where(
+            ClientAPIKey.access_request_id == owner_request.id,
+            ClientAPIKey.revoked_at.is_(None),
+            ClientAPIKey.expires_at > now,
+        )
+        .order_by(ClientAPIKey.id.desc())
+    ).first()
+    if owner_api_key is None:
+        raise HTTPException(status_code=400, detail="No active API key exists for this verified account")
+
     client_id = "fs_client_" + secrets.token_urlsafe(18)
     client_secret = "fs_secret_" + secrets.token_urlsafe(36)
     row = OAuthClient(
-        access_request_id=owner_request.id,
+        api_key_id=owner_api_key.id,
         client_id=client_id,
         client_secret_hash=hash_api_key(client_secret),
-        name=payload.name.strip(),
-        organization=owner_request.organization,
-        client_address=owner_request.client_address,
+        label=payload.name.strip(),
         scopes=" ".join(sorted(requested)),
     )
     db.add(row)
     db.commit()
     db.refresh(row)
     return {
-        **_oauth_client_payload(row),
+        **_oauth_client_payload(row, owner_api_key),
         "client_secret": client_secret,
         "warning": "Copy the client secret now. It is shown once; only its hash is stored.",
         "token_url": f"{PUBLIC_BASE_URL}/oauth/token",
@@ -658,16 +670,18 @@ def list_managed_oauth_clients(
     credential: APIKeyManagerCredential = Depends(require_management_credential),
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    rows = db.scalars(
-        select(OAuthClient)
-        .join(AccessRequest, OAuthClient.access_request_id == AccessRequest.id)
+    rows = db.execute(
+        select(OAuthClient, ClientAPIKey)
+        .join(ClientAPIKey, OAuthClient.api_key_id == ClientAPIKey.id)
+        .join(AccessRequest, ClientAPIKey.access_request_id == AccessRequest.id)
         .where(
+            AccessRequest.id == credential.access_request_id,
             AccessRequest.email == credential.owner_email,
             AccessRequest.telegram_username == credential.telegram_username,
         )
         .order_by(OAuthClient.id.desc())
     ).all()
-    return [_oauth_client_payload(row) for row in rows]
+    return [_oauth_client_payload(row, api_key) for row, api_key in rows]
 
 
 @app.post("/auth/managed-oauth-clients/{client_pk}/revoke", tags=["OAuth 2.0"])
@@ -679,11 +693,13 @@ def revoke_managed_oauth_client(
     row = db.get(OAuthClient, client_pk)
     if row is None:
         raise HTTPException(status_code=404, detail="OAuth client not found")
-    owner_request = db.get(AccessRequest, row.access_request_id)
+    api_key = db.get(ClientAPIKey, row.api_key_id)
+    owner_request = db.get(AccessRequest, api_key.access_request_id) if api_key else None
     if (
         owner_request is None
+        or owner_request.id != credential.access_request_id
         or owner_request.email != credential.owner_email
-        or owner_request.telegram_username != credential.telegram_username
+        or (owner_request.telegram_username or "").lower() != credential.telegram_username.lower()
     ):
         raise HTTPException(status_code=404, detail="OAuth client not found")
     if row.revoked_at is None:

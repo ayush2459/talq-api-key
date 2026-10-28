@@ -8,8 +8,10 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import boto3
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 router = APIRouter(prefix="/data", tags=["FlowSense live data"])
@@ -22,7 +24,33 @@ elif DATABASE_URL.startswith("postgresql://") and "+psycopg" not in DATABASE_URL
 
 # Do not fall back to the gateway's key database. Missing configuration should
 # fail closed instead of accidentally returning unrelated data.
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=1800) if DATABASE_URL else None
+IAM_AUTH = os.getenv("FLOW_SENSE_IAM_AUTH", "false").strip().lower() in {"1", "true", "yes"}
+AWS_REGION = (os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "ap-southeast-1").strip()
+_db_url = make_url(DATABASE_URL) if DATABASE_URL else None
+engine = create_engine(
+    _db_url,
+    pool_pre_ping=True,
+    # IAM auth tokens expire after 15 minutes; recycle pooled connections early.
+    pool_recycle=600 if IAM_AUTH else 1800,
+) if _db_url else None
+
+if engine is not None and IAM_AUTH:
+    if _db_url.drivername not in {"postgresql+psycopg", "postgresql"}:
+        raise RuntimeError("FLOW_SENSE_IAM_AUTH requires a PostgreSQL FLOW_SENSE_DATABASE_URL")
+    if not _db_url.host or not _db_url.username:
+        raise RuntimeError("IAM auth requires a database hostname and username in FLOW_SENSE_DATABASE_URL")
+
+    @event.listens_for(engine, "do_connect")
+    def _add_iam_auth_token(dialect, conn_rec, cargs, cparams):
+        # Generate a fresh token for every new DB connection; never store it in the URL.
+        rds = boto3.client("rds", region_name=AWS_REGION)
+        cparams["password"] = rds.generate_db_auth_token(
+            DBHostname=_db_url.host,
+            Port=_db_url.port or 5432,
+            DBUsername=_db_url.username,
+            Region=AWS_REGION,
+        )
+        cparams["sslmode"] = "require"
 
 
 def _db():

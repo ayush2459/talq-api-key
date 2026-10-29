@@ -13,3 +13,11 @@ services:
         value: ""
       - key: DEMO_MODE
         value: "true"
+
+  - type: web
+    name: flowsense-talq-dashboard
+    runtime: static
+    plan: free
+    buildCommand: ""
+    staticPublishPath: ./frontend
+    autoDeployTrigger: commit

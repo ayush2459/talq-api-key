@@ -22,6 +22,12 @@ The dashboard includes an OAuth 2.0 Applications panel for the Telegram-verified
 
 Scopes are restricted to `data:read` and `gateway:read`. Use `Authorization: Bearer <access_token>` on supported read-only gateway routes; legacy `X-API-Key` access remains supported. Revoking an OAuth client revokes its outstanding access tokens. Do not place client secrets in frontend code. See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for token exchange examples.
 
+### OAuth 2.0 Data Explorer dashboard tab
+
+The console has an `OAuth Data Explorer` tab for manually testing a registered OAuth client. Enter the Client ID and Client Secret, choose the `data:read` scope, and connect. The token response returns the approved client's address and organization metadata so the browser can query `/data/facilities`, `/data/energy`, and `/data/water` with the required `clientAddress` and TALQ version header. The page supports all facilities or a selected facility, a 24-hour to 365-day time range, manual refresh, and optional 30-second, 60-second, or 5-minute refresh. It shows reading timestamps and warns when the latest returned reading is older than 30 minutes. Refresh queries the database; it does not generate sensor readings.
+
+**Security limitation:** This explorer is intended as a controlled diagnostic tool. The OAuth Client Credentials grant is designed for confidential clients. A secret entered into a browser is visible to that browser session even if it is not persisted in browser storage. For production user-facing access, exchange the credentials in a trusted backend-for-frontend or use Authorization Code with PKCE. The explorer does not save the client secret or Bearer token in local or session storage.
+
 ## API endpoints
 
 ### Public

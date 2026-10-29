@@ -234,6 +234,8 @@ def test_oauth_client_credentials_grant_and_scoped_bearer_access(monkeypatch, tm
     assert token_body["token_type"] == "Bearer"
     assert token_body["expires_in"] == 3600
     assert token_body["access_token"].startswith("fs_oauth_")
+    assert token_body["client_address"] == str(request.get("client_address", "00000000-0000-4000-8000-000000000001"))
+    assert token_body["organization"] == "Example Org"
 
     # Protected gateway read route accepts OAuth bearer tokens as well as legacy API keys.
     headers = {"Authorization": f"Bearer {token_body['access_token']}"}

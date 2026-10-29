@@ -462,7 +462,6 @@
       if(!body.client_address) throw new Error("Token response did not include the registered client address. Update the backend and try again.");
       oauthExplorerClientAddress=body.client_address;
       setExplorerStatus("Authenticated · "+(body.organization||"OAuth client"));
-      setExplorerStatus("Authenticated · "+(identity.authorized_organization||"OAuth client"));
       $("oauthExplorerControls").style.display="block";
       $("oauthExplorerMessage").classList.add("hidden");
       await loadOAuthExplorerFacilities();

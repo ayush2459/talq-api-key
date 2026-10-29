@@ -600,6 +600,7 @@ def revoke_managed_api_key(
 
 class OAuthClientCreateInput(BaseModel):
     name: str = Field(min_length=2, max_length=120)
+    organization: str = Field(min_length=2, max_length=160)
     scopes: list[str] = Field(default_factory=lambda: ["data:read", "gateway:read"])
 
 
@@ -646,6 +647,18 @@ def create_managed_oauth_client(
     ).first()
     if owner_api_key is None:
         raise HTTPException(status_code=400, detail="No active API key exists for this verified account")
+    requested_organization = payload.organization.strip()
+    verified_organization = (owner_request.organization or "").strip()
+    key_organization = (owner_api_key.organization or "").strip()
+    if (
+        not requested_organization
+        or requested_organization.casefold() != verified_organization.casefold()
+        or requested_organization.casefold() != key_organization.casefold()
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Organization does not match the verified management token. Check the organization name and try again.",
+        )
 
     client_id = "fs_client_" + secrets.token_urlsafe(18)
     client_secret = "fs_secret_" + secrets.token_urlsafe(36)

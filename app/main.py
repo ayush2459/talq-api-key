@@ -212,8 +212,10 @@ def require_client_auth(
     if client is None or client.revoked_at is not None:
         raise HTTPException(status_code=401, detail="OAuth client is revoked or unavailable")
     client_api_key = db.get(ClientAPIKey, client.api_key_id)
-    if client_api_key is None:
-        raise HTTPException(status_code=401, detail="OAuth client owner is unavailable")
+    if client_api_key is None or client_api_key.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="OAuth client owner is revoked or unavailable")
+    if _utc(client_api_key.expires_at) is not None and _utc(client_api_key.expires_at) <= now:
+        raise HTTPException(status_code=401, detail="OAuth client owner API key has expired")
     token_scopes = set((token.scopes or "").split())
     path = request.url.path if request is not None else ""
     if path.startswith("/data/"):

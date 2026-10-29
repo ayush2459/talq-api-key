@@ -390,7 +390,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   }
   async function refreshOAuthClients(){
     const area=$("oauthTableArea"); if(!area) return;
-    if(!managerToken){ area.innerHTML='<div class="empty"><div class="empty-icon">⛨</div><h3>Connect your key manager</h3><p>Use the management token issued after Telegram verification to manage OAuth clients.</p><button class="btn btn-secondary" id="connectOAuthManagerBtn">Connect key manager</button></div>'; const b=$("connectOAuthManagerBtn");if(b)b.onclick=connectManagerToken;return; }
+    if(!managerToken){ area.innerHTML='<div class="empty"><div class="empty-icon">⛨</div><h3>Connect your key manager</h3><p>Use the management token issued after Telegram verification to manage OAuth clients.</p><button class="btn btn-secondary" id="connectOAuthManagerBtn">Connect key manager</button></div>'; const b=$("connectOAuthManagerBtn");if(b)b.onclick=connectKeyManager;return; }
     try{
       const rows=await apiFetch("/auth/managed-oauth-clients",{headers:{"X-Key-Management-Token":managerToken}});
       if(!rows.length){area.innerHTML='<div class="empty"><div class="empty-icon">⛨</div><h3>No OAuth clients yet</h3><p>Create an OAuth client for a server-side integration. Keep its client secret out of browser applications and source control.</p></div>';return;}
@@ -401,8 +401,25 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
       const retry=$("retryOAuthLoad");if(retry)retry.onclick=refreshOAuthClients;
     }
   }
+  async function connectKeyManager(){
+    modal('<div class="modal-head"><div><h2>Connect key manager</h2><p>Authenticate to manage your existing API keys and OAuth clients.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="field full"><label for="revokeManagerTokenInput">Management token <span class="required">*</span></label><input id="revokeManagerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_…" required><div class="hint">This token is checked by the gateway and is kept in memory only for this browser session.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManagerConnect">Cancel</button><div class="right"><button class="btn btn-primary" id="validateManagerConnect">Connect</button></div></div></div>');
+    $("closeModal").onclick=closeModal;$("cancelManagerConnect").onclick=closeModal;
+    $("validateManagerConnect").onclick=async()=>{
+      const value=$("revokeManagerTokenInput").value.trim();
+      if(!value){toast("Enter your management token.");$("revokeManagerTokenInput").focus();return;}
+      const button=$("validateManagerConnect");button.disabled=true;button.textContent="Validating…";
+      try{
+        const rows=await apiFetch("/auth/managed-api-keys",{headers:{"X-Key-Management-Token":value}});
+        managerToken=value;
+        const byId=new Map(keys.map(k=>[String(k.id),k]));
+        keys=rows.map(row=>{const old=byId.get(String(row.id))||{};return {...old,id:row.id,name:row.label,organization:row.organization,clientAddress:row.client_address,prefix:row.key_prefix,createdAt:row.created_at?new Date(row.created_at):new Date(),expiresAt:row.expires_at?new Date(row.expires_at):null,status:row.revoked?"Revoked":row.expired?"Expired":"Active",apiKey:null,mode:"Live backend"};});
+        persistKeys();closeModal();render();await refreshOAuthClients();
+        toast("Key manager connected. You can now revoke API keys and OAuth clients.");
+      }catch(error){toast("Could not connect key manager: "+error.message);button.disabled=false;button.textContent="Retry connection";}
+    };
+  }
   async function createOAuthClient(){
-    // Credentials are generated only after the management token and organization are revalidated.
+    // Credential creation remains a separate flow requiring explicit organization validation.
     connectManagerToken();
   }
   function showOAuthClientSecret(client){
@@ -415,9 +432,16 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     $("copyOAuthSecret").onclick=async()=>{try{await navigator.clipboard.writeText(client.client_secret);toast("Secret copied. Store it in a secret manager.")}catch{toast("Copy the secret manually.")}};
   }
   async function revokeOAuthClient(id){
+    if(!managerToken){toast("Connect your key management token before revoking credentials.");return;}
     if(!window.confirm("Revoke this OAuth client? Existing access tokens will be revoked too."))return;
-    try{await apiFetch("/auth/managed-oauth-clients/"+encodeURIComponent(id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});toast("OAuth client and its tokens revoked.");await refreshOAuthClients();}
-    catch(error){toast(error.message);}
+    const button=Array.from(document.querySelectorAll("[data-oauth-revoke]")).find(b=>String(b.dataset.oauthRevoke)===String(id));
+    if(button){button.disabled=true;button.textContent="Revoking…";}
+    try{
+      const result=await apiFetch("/auth/managed-oauth-clients/"+encodeURIComponent(id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});
+      if(!result.revoked)throw new Error("The gateway did not confirm OAuth client revocation.");
+      toast("OAuth client revoked; its active access tokens have also been revoked.");
+      await refreshOAuthClients();
+    }catch(error){toast("Could not revoke OAuth client: "+error.message);if(button){button.disabled=false;button.textContent="Retry revoke";}}
   }
   function connectManagerToken(){
     modal('<div class="modal-head"><div><h2>Generate OAuth credentials</h2><p>Enter your management token and the exact organization registered during Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="field full"><label for="managerTokenInput">Management token <span class="required">*</span></label><input id="managerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_…" required><div class="hint">The token is validated by the backend and is never saved in browser storage.</div></div><div class="field full" style="margin-top:15px"><label for="managerOrganizationInput">Organization <span class="required">*</span></label><input id="managerOrganizationInput" type="text" autocomplete="organization" placeholder="Enter your verified organization name" required><div class="hint">Must match the organization on the verified access request and its active API key.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManager">Cancel</button><div class="right"><button class="btn btn-primary" id="saveManager">Validate &amp; Generate Credentials</button></div></div></div>');
@@ -486,7 +510,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   function render(){
     const toolbar=document.querySelector(".top-actions")||document.querySelector(".topbar-actions")||document.querySelector(".topbar");
     if(toolbar&&!document.getElementById("connectManagerBtn")){
-      const b=document.createElement("button");b.id="connectManagerBtn";b.className="btn btn-secondary";b.textContent="Connect key manager";b.style.marginRight="8px";b.onclick=connectManagerToken;toolbar.prepend(b);
+      const b=document.createElement("button");b.id="connectManagerBtn";b.className="btn btn-secondary";b.textContent="Connect key manager";b.style.marginRight="8px";b.onclick=connectKeyManager;toolbar.prepend(b);
     }
     const active=keys.filter(isActive).length;
     const expiring=keys.filter(k=>isActive(k)&&k.expiresAt&&k.expiresAt-now()<30*86400000).length;
@@ -611,9 +635,9 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     $("finishDemo").onclick=()=>{persistKeys();currentSecret=null;closeModal();render();refreshOAuthClients();toast("Key details saved in this browser. The full secret is not stored.")};
   }
   function confirmRevoke(id){
-    const k=keys.find(x=>x.id===id);if(!k)return;
+    const k=keys.find(x=>String(x.id)===String(id));if(!k){toast("Could not find this API key. Refresh the key list and try again.");return;}
     modal('<div class="modal-head"><div><h2>Revoke API key?</h2><p>This action cannot be undone in the production workflow.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><p class="confirm-text">You are about to revoke <span class="danger-name">'+esc(k.name)+'</span>. The backend will immediately reject requests made with this key. Revocation is permanent.</p><div class="modal-actions"><button class="btn btn-secondary" id="cancelRevoke">Cancel</button><div class="right"><button class="btn btn-danger" id="confirmRevoke">Revoke key</button></div></div></div>');
-    $("closeModal").onclick=closeModal;$("cancelRevoke").onclick=closeModal;$("confirmRevoke").onclick=async()=>{const b=$("confirmRevoke");b.disabled=true;b.textContent="Revoking…";try{await apiFetch("/auth/managed-api-keys/"+encodeURIComponent(k.id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});k.status="Revoked";persistKeys();closeModal();render();toast("API key revoked by the backend.")}catch(error){toast(error.message);b.disabled=false;b.textContent="Retry revoke"}};
+    $("closeModal").onclick=closeModal;$("cancelRevoke").onclick=closeModal;$("confirmRevoke").onclick=async()=>{const b=$("confirmRevoke");b.disabled=true;b.textContent="Revoking…";try{if(!managerToken)throw new Error("Connect your key management token before revoking credentials.");await apiFetch("/auth/managed-api-keys/"+encodeURIComponent(k.id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});k.status="Revoked";persistKeys();closeModal();await refreshManagedKeys();await refreshOAuthClients();render();toast("API key revoked successfully. The backend will reject future requests with this key.")}catch(error){toast(error.message);b.disabled=false;b.textContent="Retry revoke"}};
   }
 
   // OAuth data explorer: do not persist Client Secret or access token to browser storage.

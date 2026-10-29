@@ -211,15 +211,8 @@
     }
   }
   async function createOAuthClient(){
-    if(!managerToken){toast("Connect your key manager first.");connectManagerToken();return;}
-    const name=window.prompt("Name for this OAuth application (for example, FlowSense Analytics Backend):");
-    if(name===null)return;
-    if(name.trim().length<2){toast("Enter an application name of at least 2 characters.");return;}
-    try{
-      const result=await apiFetch("/auth/managed-oauth-clients",{method:"POST",headers:{"Content-Type":"application/json","X-Key-Management-Token":managerToken},body:JSON.stringify({name:name.trim(),scopes:["data:read","gateway:read"]})});
-      showOAuthClientSecret(result);
-      await refreshOAuthClients();
-    }catch(error){toast(error.message);}
+    // Credentials are generated only after the management token and organization are revalidated.
+    connectManagerToken();
   }
   function showOAuthClientSecret(client){
     const tokenUrl=API_BASE_URL+"/oauth/token";
@@ -236,18 +229,37 @@
     catch(error){toast(error.message);}
   }
   function connectManagerToken(){
-    modal('<div class="modal-head"><div><h2>Connect key manager</h2><p>Enter the management token shown once when an API key is issued. OAuth creation is restricted to that token’s organization.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="field full"><label for="managerTokenInput">Management token</label><input id="managerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_…"><div class="hint">This token is issued only after API-key creation and is restricted to its verified organization. It is kept in page memory only and is not saved in browser storage.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManager">Cancel</button><div class="right"><button class="btn btn-primary" id="saveManager">Connect</button></div></div></div>');
+    modal('<div class="modal-head"><div><h2>Generate OAuth credentials</h2><p>Enter your management token and the exact organization registered during Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="field full"><label for="managerTokenInput">Management token <span class="required">*</span></label><input id="managerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_…" required><div class="hint">The token is validated by the backend and is never saved in browser storage.</div></div><div class="field full" style="margin-top:15px"><label for="managerOrganizationInput">Organization <span class="required">*</span></label><input id="managerOrganizationInput" type="text" autocomplete="organization" placeholder="Enter your verified organization name" required><div class="hint">Must match the organization on the verified access request and its active API key.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManager">Cancel</button><div class="right"><button class="btn btn-primary" id="saveManager">Validate &amp; Generate Credentials</button></div></div></div>');
     $("closeModal").onclick=closeModal;$("cancelManager").onclick=closeModal;
     $("saveManager").onclick=async()=>{
-      const value=$("managerTokenInput").value.trim();if(!value){toast("Enter your management token.");return;}
-      const b=$("saveManager");b.disabled=true;b.textContent="Connecting…";
+      const value=$("managerTokenInput").value.trim();
+      const organization=$("managerOrganizationInput").value.trim();
+      if(!value){toast("Enter your management token.");$("managerTokenInput").focus();return;}
+      if(organization.length<2){toast("Enter the verified organization name.");$("managerOrganizationInput").focus();return;}
+      const b=$("saveManager");b.disabled=true;b.textContent="Validating…";
       try{
+        // First authenticate the management token; this endpoint returns only keys in its verified scope.
         const rows=await apiFetch("/auth/managed-api-keys",{headers:{"X-Key-Management-Token":value}});
+        const normalized=organization.toLocaleLowerCase();
+        const matchingKey=rows.find(row=>String(row.organization||"").trim().toLocaleLowerCase()===normalized&&!row.revoked&&!row.expired);
+        if(!matchingKey){
+          throw new Error("Organization does not match an active API key for this management token. Check the organization name.");
+        }
+        b.textContent="Generating credentials…";
+        // The backend independently validates token ownership and organization before issuing secrets.
+        const result=await apiFetch("/auth/managed-oauth-clients",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","X-Key-Management-Token":value},
+          body:JSON.stringify({name:organization+" OAuth Client",organization:organization,scopes:["data:read","gateway:read"]})
+        });
         managerToken=value;
         const byId=new Map(keys.map(k=>[String(k.id),k]));
         keys=rows.map(row=>{const old=byId.get(String(row.id))||{};return {...old,id:row.id,name:row.label,organization:row.organization,clientAddress:row.client_address,prefix:row.key_prefix,createdAt:row.created_at?new Date(row.created_at):new Date(),expiresAt:row.expires_at?new Date(row.expires_at):null,status:row.revoked?"Revoked":row.expired?"Expired":"Active",apiKey:old.apiKey||null,mode:"Live backend"};});
-        persistKeys();closeModal();render();toast("Backend credentials connected.");refreshOAuthClients();
-      }catch(error){toast(error.message);b.disabled=false;b.textContent="Connect";}
+        persistKeys();closeModal();render();
+        showOAuthClientSecret(result);
+        await refreshOAuthClients();
+        toast("Organization verified. OAuth credentials generated.");
+      }catch(error){toast(error.message);b.disabled=false;b.textContent="Validate & Generate Credentials";}
     };
   }
 

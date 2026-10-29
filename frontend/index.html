@@ -504,7 +504,7 @@
       $("oauthEnergyPanel").style.display="block"; $("oauthWaterPanel").style.display="block";
       renderExplorerTable("oauthEnergyTable",energy.readings||[],[{key:"facility_code",label:"Facility"},{key:"facility_name",label:"Facility name"},{key:"meter_code",label:"Meter"},{key:"reading_value",label:"Reading"},{key:"unit",label:"Unit"},{key:"quality_status",label:"Quality"}]);
       const merged=[...(water.meter_readings||[]).map(r=>({...r,record_type:"Meter"})),...(water.sensor_readings||[]).map(r=>({...r,record_type:"Sensor",reading_value:r.numeric_value!==null&&r.numeric_value!==undefined?r.numeric_value:r.boolean_value,meter_code:r.sensor_code}))].sort((a,b)=>new Date(b.reading_time)-new Date(a.reading_time));
-      renderExplorerTable("oauthWaterTable",merged,[{key:"facility_code",label:"Facility"},{key:"facility_name",label:"Facility name"},{key:"record_type",label:"Type"},{key:"meter_code",label:"Meter / sensor"},{key:"measurement",label:"Measurement"},{key:"reading_value",label:"Value"},{key:"unit",label:"Unit"},{key:"quality_status",label:"Quality"}]);
+      renderExplorerTable("oauthWaterTable",merged,[{key:"facility_code",label:"Facility"},{key:"facility_name",label:"Facility name"},{key:"record_type",label:"Type"},{key:"meter_code",label:"Meter / sensor"},{key:"reading_value",label:"Value"},{key:"unit",label:"Unit"},{key:"quality_status",label:"Quality"}]);
       const all=[...(energy.readings||[]),...merged].map(r=>Date.parse(r.reading_time)).filter(Number.isFinite);
       const latest=all.length?Math.max(...all):0;
       $("oauthExplorerLastUpdated").textContent="Database query completed.";

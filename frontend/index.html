@@ -67,7 +67,7 @@
             <form id="oauthExplorerForm" class="form-grid" autocomplete="off">
               <div class="field"><label for="oauthExplorerClientId">Client ID</label><input id="oauthExplorerClientId" name="client_id" required autocomplete="off" placeholder="fs_client_…"></div>
               <div class="field"><label for="oauthExplorerClientSecret">Client Secret</label><input id="oauthExplorerClientSecret" name="client_secret" type="password" required autocomplete="new-password" placeholder="fs_secret_…"></div>
-              <div class="field"><label for="oauthExplorerScope">Scope</label><select id="oauthExplorerScope"><option value="data:read">data:read — live data</option><option value="data:read gateway:read">data:read + gateway:read</option></select></div>
+              <div class="field"><label for="oauthExplorerScope">Scope</label><select id="oauthExplorerScope"><option value="data:read">data:read — read-only data access</option><option value="data:read gateway:read">data:read + gateway:read</option></select></div>
               <div class="field" style="justify-content:end"><button class="btn btn-primary" id="oauthExplorerConnect" type="submit">Connect with OAuth 2.0</button></div>
             </form>
             <div id="oauthExplorerMessage" class="notice hidden" role="status" style="margin-top:14px"></div>
@@ -77,7 +77,7 @@
           <div class="panel-head"><div><h2>2. Choose readings</h2><p>All facilities is the default; select a facility to narrow the results.</p></div><button class="btn btn-secondary" id="oauthExplorerDisconnect" type="button">Disconnect</button></div>
           <div style="padding:20px 22px" class="form-grid">
             <div class="field"><label for="oauthExplorerFacility">Facility</label><select id="oauthExplorerFacility"><option value="">All facilities</option></select></div>
-            <div class="field"><label for="oauthExplorerHours">Time range</label><select id="oauthExplorerHours"><option value="24">Last 24 hours</option><option value="168">Last 7 days</option><option value="720" selected>Last 30 days</option><option value="8760">Last 365 days</option></select></div>
+            <div class="field"><label for="oauthExplorerHours">Time range</label><select id="oauthExplorerHours" aria-label="Time range (defaults to last 30 days)"><option value="24">Last 24 hours</option><option value="168">Last 7 days</option><option value="720" selected>Last 30 days (default)</option><option value="8760">Last 365 days</option></select></div>
             <div class="field"><label for="oauthExplorerRefresh">Automatic refresh</label><select id="oauthExplorerRefresh"><option value="0">Off</option><option value="30">Every 30 seconds</option><option value="60">Every 60 seconds</option><option value="300">Every 5 minutes</option></select></div>
             <div class="field" style="justify-content:end"><button class="btn btn-primary" id="oauthExplorerRefreshNow" type="button">Refresh readings</button></div>
           </div>
@@ -465,6 +465,8 @@
       $("oauthExplorerControls").style.display="block";
       $("oauthExplorerMessage").classList.add("hidden");
       await loadOAuthExplorerFacilities();
+      // Enforce the documented default even if the browser retained stale DOM state.
+      $("oauthExplorerHours").value="720";
       await loadOAuthExplorerData();
       scheduleExplorerRefresh();
     } catch(error) {
@@ -509,7 +511,7 @@
       const latest=all.length?Math.max(...all):0;
       $("oauthExplorerLastUpdated").textContent="Last successful query: "+new Date().toLocaleString()+" · Latest returned reading: "+(latest?new Date(latest).toLocaleString():"none");
       const warn=$("oauthExplorerStaleWarning");
-      if(!latest || Date.now()-latest>30*60*1000){warn.textContent=latest?"STALE DATA: newest returned reading is more than 30 minutes old. Refresh re-queries the database; new sensor ingestion is required for live readings.":"No readings exist for this selection and time range.";warn.classList.remove("hidden");}
+      if(!latest || Date.now()-latest>30*60*1000){warn.textContent=latest?"STALE DATA: newest database reading is "+new Date(latest).toLocaleString()+". These historical records are not live readings. Refresh only re-queries the database; new sensor ingestion is required for newer data.":"No readings exist for this selection and time range.";warn.classList.remove("hidden");}
       else warn.classList.add("hidden");
     } catch(error) {
       if(/expired|invalid|bearer token/i.test(error.message)){stopExplorerTimer();setExplorerStatus("Session expired");}

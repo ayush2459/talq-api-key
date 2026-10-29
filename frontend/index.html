@@ -23,6 +23,7 @@
       <button type="button"><span class="nav-icon">♙</span><span class="nav-label">My Profile</span></button>
       <button type="button" data-page="oauth-data"><span class="nav-icon">◉</span><span class="nav-label">OAuth Data Explorer</span></button>
       <button type="button" data-page="docs"><span class="nav-icon">▤</span><span class="nav-label">Documentation</span></button>
+      <button type="button" data-page="integration"><span class="nav-icon">⌘</span><span class="nav-label">Backend Integration</span></button>
       <button type="button"><span class="nav-icon">ⓘ</span><span class="nav-label">Support</span></button>
     </nav>
     <div class="sidebar-bottom">⇥ <span class="bottom-copy">Backend integration preview</span></div>
@@ -155,6 +156,196 @@
             <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/certification/" target="_blank" rel="noreferrer">Official TALQ certification process ↗</a></li>
             <li><a class="docs-link" href="https://www.talq-consortium.org/certified-products.html" target="_blank" rel="noreferrer">Official list of TALQ-certified products ↗</a></li>
           </ul><p style="margin-top:12px;color:#7b8798;font-size:11px">TALQ certification is distinct from implementing an API key workflow or exposing a Swagger UI. Consult the Consortium's current certification requirements for formal conformance.</p></div>
+        </section>
+      </section>
+
+      <section class="docs-page" id="backendIntegrationPage" aria-label="Backend integration guide">
+        <div class="docs-hero">
+          <div class="eyebrow" style="color:#8bc2ff">Developer guide · Server-to-server</div>
+          <h1>Connect your backend to FlowSense</h1>
+          <p>Follow this end-to-end workflow to request access, obtain credentials, authenticate securely, and read approved FlowSense facility, energy, and water data from your own backend.</p>
+          <div style="margin-top:16px"><span class="docs-pill">Recommended: OAuth 2.0 Client Credentials</span></div>
+        </div>
+        <div class="docs-warning"><strong>Important security rule:</strong> Keep the Client Secret, management token, API key, and OAuth access token on your server. Never place them in frontend JavaScript, mobile app bundles, Git commits, screenshots, or logs. Use HTTPS and a secret manager or protected environment variables.</div>
+
+        <div class="docs-toc" aria-label="Guide sections">
+          <a href="#integration-credentials">1. Get credentials</a>
+          <a href="#integration-oauth">2. OAuth workflow</a>
+          <a href="#integration-python">3. Python backend example</a>
+          <a href="#integration-apikey">4. API-key alternative</a>
+          <a href="#integration-endpoints">5. Endpoints</a>
+          <a href="#integration-troubleshoot">Troubleshooting</a>
+        </div>
+
+        <section class="docs-section" id="integration-credentials">
+          <h2>1. Obtain your credentials</h2>
+          <div class="docs-grid">
+            <article class="docs-card">
+              <h3>Step 1 — Submit an access request</h3>
+              <ol>
+                <li>Open the API Keys tab and choose <strong>Create API Key</strong>.</li>
+                <li>Enter your contact details, organization, Telegram username, purpose, and the real CMS/client UUID assigned to your integration.</li>
+                <li>Submit the request and open the Telegram verification link.</li>
+              </ol>
+              <p>Use the same organization and Telegram identity throughout the verification flow. A typed Telegram username alone does not complete verification.</p>
+            </article>
+            <article class="docs-card">
+              <h3>Step 2 — Verify and issue access</h3>
+              <ol>
+                <li>Press <strong>Start</strong> in the configured Telegram bot from the matching Telegram account.</li>
+                <li>Return to the console and complete the verification/check-status step.</li>
+                <li>Issue the API key only after verification succeeds. Copy the key when it is displayed; the raw key is shown once.</li>
+                <li>Store it securely. Do not send it to your browser or commit it to source control.</li>
+              </ol>
+            </article>
+            <article class="docs-card">
+              <h3>Step 3 — Generate OAuth credentials (recommended)</h3>
+              <ol>
+                <li>Use the key-management token issued by the verified flow. If prompted, select <strong>Connect key manager</strong> and enter the management token.</li>
+                <li>Choose <strong>Create OAuth Client</strong>.</li>
+                <li>Enter the management token and the exact organization registered during verification.</li>
+                <li>The server validates both values and checks that the organization has an active, non-expired, non-revoked API key.</li>
+                <li>Copy the generated <strong>Client ID</strong> and <strong>Client Secret</strong> immediately. The secret is shown once.</li>
+              </ol>
+            </article>
+            <article class="docs-card">
+              <h3>What each credential does</h3>
+              <ul>
+                <li><strong>Management token:</strong> lets the verified owner manage scoped keys and OAuth clients; treat it like a password.</li>
+                <li><strong>Client ID + Client Secret:</strong> authenticate your server to the OAuth token endpoint.</li>
+                <li><strong>Access token:</strong> short-lived Bearer token returned by OAuth; use it to call protected data endpoints.</li>
+                <li><strong>API key:</strong> alternative direct authentication using the <code>X-API-Key</code> header.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="docs-section" id="integration-oauth">
+          <h2>2. OAuth 2.0 request flow</h2>
+          <div class="docs-card">
+            <ol>
+              <li>Your backend reads the Client ID and Client Secret from environment variables or a secret manager.</li>
+              <li>Your backend sends a <code>POST</code> request to <code>/oauth/token</code> using the <code>client_credentials</code> grant.</li>
+              <li>The gateway returns a short-lived Bearer access token (currently 3600 seconds / one hour).</li>
+              <li>Call the protected data endpoint with <code>Authorization: Bearer &lt;access_token&gt;</code> and <code>talq-api-version: 2.7.1</code>.</li>
+              <li>Include the registered <code>clientAddress</code> UUID as a query parameter on the data requests.</li>
+              <li>When the token expires, request a new one. Never hardcode or permanently cache an access token.</li>
+            </ol>
+            <div class="docs-code">POST https://flowsense-talq-gateway.onrender.com/oauth/token
+Authorization: Basic base64(CLIENT_ID:CLIENT_SECRET)
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&amp;scope=data%3Aread</div>
+            <p style="margin-top:12px">The response includes <code>access_token</code>, <code>token_type</code>, <code>expires_in</code>, and registered client metadata such as <code>client_address</code>. Use the exact <code>client_address</code> returned for the approved client.</p>
+          </div>
+        </section>
+
+        <section class="docs-section" id="integration-python">
+          <h2>3. Copy-ready Python backend example</h2>
+          <p class="sub">Requires Python 3.10+ and <code>requests</code> (<code>pip install requests</code>). Run this only in your backend environment, not in a browser or public client.</p>
+          <div class="docs-code">import os
+import requests
+from requests.auth import HTTPBasicAuth
+
+BASE_URL = "https://flowsense-talq-gateway.onrender.com"
+CLIENT_ID = os.environ["FLOWSENSE_CLIENT_ID"]
+CLIENT_SECRET = os.environ["FLOWSENSE_CLIENT_SECRET"]
+
+def get_access_token():
+    response = requests.post(
+        f"{BASE_URL}/oauth/token",
+        auth=HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET),
+        data={"grant_type": "client_credentials", "scope": "data:read"},
+        timeout=20,
+    )
+    response.raise_for_status()
+    token_data = response.json()
+    return token_data["access_token"], token_data["expires_in"], token_data["client_address"]
+
+def get_energy_readings(client_address, access_token, facility_code=None):
+    params = {"hours": 24, "limit": 100}
+    if facility_code:
+        params["facility_code"] = facility_code
+
+    response = requests.get(
+        f"{BASE_URL}/data/energy",
+        params={**params, "clientAddress": client_address},
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "talq-api-version": "2.7.1",
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+    return response.json()
+
+if __name__ == "__main__":
+    token, expires_in, client_address = get_access_token()
+    readings = get_energy_readings(client_address, token)
+    print("Token lifetime (seconds):", expires_in)
+    print("Returned reading count:", readings.get("count", len(readings.get("readings", []))))
+    # Process readings in your backend; avoid printing tokens or secrets.</div>
+          <div class="docs-warning">Set <code>FLOWSENSE_CLIENT_ID</code> and <code>FLOWSENSE_CLIENT_SECRET</code> in your deployment's secret/environment configuration. The sample deliberately prints only a count, never the token or secret. In production, cache the token only in server memory until shortly before expiry and refresh it safely.</div>
+        </section>
+
+        <section class="docs-section" id="integration-apikey">
+          <h2>4. Direct API-key authentication (alternative)</h2>
+          <div class="docs-card">
+            <p>If your integration is not using OAuth, use the API key issued after Telegram verification. The key goes in the <code>X-API-Key</code> header; do not put it in a URL or query string.</p>
+            <div class="docs-code">GET https://flowsense-talq-gateway.onrender.com/data/facilities?limit=100&amp;clientAddress=YOUR_REGISTERED_CLIENT_UUID
+X-API-Key: YOUR_API_KEY
+talq-api-version: 2.7.1</div>
+            <p style="margin-top:12px">A minimal Python request:</p>
+            <div class="docs-code">import os
+import requests
+
+response = requests.get(
+    "https://flowsense-talq-gateway.onrender.com/data/facilities",
+    params={"limit": 100, "clientAddress": os.environ["FLOWSENSE_CLIENT_ADDRESS"]},
+    headers={
+        "X-API-Key": os.environ["FLOWSENSE_API_KEY"],
+        "talq-api-version": "2.7.1",
+    },
+    timeout=20,
+)
+response.raise_for_status()
+facilities = response.json()
+print("Facilities returned:", len(facilities.get("facilities", [])))</div>
+            <p>For data access in this gateway, the OAuth route is recommended when your client supports it. Do not send both authentication methods unless the endpoint contract specifically asks for both.</p>
+          </div>
+        </section>
+
+        <section class="docs-section" id="integration-endpoints">
+          <h2>5. Data endpoints available for integration</h2>
+          <div class="panel"><div class="table-wrap"><table class="docs-table"><thead><tr><th>Endpoint</th><th>Purpose</th><th>Useful parameters</th></tr></thead><tbody>
+            <tr><td><code>GET /data/facilities</code></td><td>List approved facility metadata.</td><td><code>limit</code></td></tr>
+            <tr><td><code>GET /data/devices</code></td><td>List devices with facility metadata.</td><td><code>facility_code</code>, <code>limit</code></td></tr>
+            <tr><td><code>GET /data/energy</code></td><td>Read energy meter readings.</td><td><code>facility_code</code>, <code>hours</code>, <code>limit</code></td></tr>
+            <tr><td><code>GET /data/water</code></td><td>Read water meter and water-related sensor readings.</td><td><code>facility_code</code>, <code>hours</code>, <code>limit</code></td></tr>
+            <tr><td><code>GET /data/alerts</code></td><td>Read available alerts and anomaly metadata.</td><td><code>facility_code</code>, <code>status</code>, <code>limit</code></td></tr>
+          </tbody></table></div></div>
+          <div class="docs-warning">All data endpoints are read-only. A facility filter is optional under the current access policy. Data returned depends on the configured FlowSense database and available records; a successful API call does not create new sensor readings. Confirm current parameters and response schemas in the <a class="docs-link" href="https://flowsense-talq-gateway.onrender.com/docs" target="_blank" rel="noreferrer">live OpenAPI / Swagger docs ↗</a>.</div>
+        </section>
+
+        <section class="docs-section" id="integration-troubleshoot">
+          <h2>6. Troubleshooting and go-live checklist</h2>
+          <div class="docs-grid">
+            <article class="docs-card"><h3>401 — Unauthorized</h3><p>Check that the API key is active, or the Client ID/Secret pair is correct. For OAuth, request a fresh token if it expired. Do not pass a management token as an API key or OAuth secret.</p></article>
+            <article class="docs-card"><h3>403 — Forbidden</h3><p>Confirm the organization matches the verified organization, the credential has not been revoked/expired, and <code>clientAddress</code> matches the registered client UUID.</p></article>
+            <article class="docs-card"><h3>422 — Validation error</h3><p>Check required query parameters, request body, grant type, scope, and the expected UUID format. Review the response detail and live API schema.</p></article>
+            <article class="docs-card"><h3>CORS or connection error</h3><p>Make the request from your backend where possible. Browser CORS policy does not replace authentication; ensure the gateway URL and deployment are reachable over HTTPS.</p></article>
+          </div>
+          <div class="docs-card">
+            <ul>
+              <li>Credentials are stored in environment variables or a secret manager.</li>
+              <li>Only HTTPS is used for deployed requests.</li>
+              <li>Tokens and secrets are excluded from logs, analytics, and error reports.</li>
+              <li>Token expiry and failed responses are handled; requests use timeouts.</li>
+              <li>Revoked or compromised credentials are rotated immediately.</li>
+              <li>Live endpoint behavior is verified against the deployed gateway and its current schema.</li>
+            </ul>
+            <p><a class="docs-link" href="https://github.com/ayush2459/talq-api-key/blob/telegram-backend-integration/CLIENT_INTEGRATION.md" target="_blank" rel="noreferrer">Open the full client integration guide ↗</a></p>
+          </div>
         </section>
       </section>
     </div>
@@ -537,20 +728,25 @@
 
   const docsPage=$("docsPage");
   const oauthDataPage=$("oauthDataPage");
+  const backendIntegrationPage=$("backendIntegrationPage");
   const consoleContent=document.querySelector(".content");
-  const originalChildren=Array.from(consoleContent.children).filter(el=>el!==docsPage && el!==oauthDataPage);
+  const specialPages=[docsPage,oauthDataPage,backendIntegrationPage];
+  const originalChildren=Array.from(consoleContent.children).filter(el=>!specialPages.includes(el));
   function showPage(name){
     document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===name || (!b.dataset.page && name==="keys" && b.textContent.includes("API Keys"))));
-    originalChildren.forEach(el=>el.classList.toggle("hidden-page",name==="docs"||name==="oauth-data"));
+    originalChildren.forEach(el=>el.classList.toggle("hidden-page",name!=="keys"));
     docsPage.classList.toggle("active",name==="docs");
     oauthDataPage.classList.toggle("active",name==="oauth-data");
+    backendIntegrationPage.classList.toggle("active",name==="integration");
     $("createBtn").style.display=name==="keys"?"":"none";
-    document.querySelector(".crumb").textContent="Developer Console / "+(name==="docs"?"Documentation":name==="oauth-data"?"Live Data":"API Management");
-    document.querySelector(".top-title").textContent=name==="docs"?"TALQ Documentation":name==="oauth-data"?"OAuth 2.0 Data Explorer":"API Key Console";
+    const pageTitle=name==="docs"?"TALQ Documentation":name==="oauth-data"?"OAuth 2.0 Data Explorer":name==="integration"?"Backend Integration":"API Management";
+    document.querySelector(".crumb").textContent="Developer Console / "+pageTitle;
+    document.querySelector(".top-title").textContent=name==="docs"?"TALQ Documentation":name==="oauth-data"?"OAuth 2.0 Data Explorer":name==="integration"?"Backend Integration Guide":"API Key Console";
   }
   document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",()=>{
     if(b.dataset.page==="docs")showPage("docs");
     else if(b.dataset.page==="oauth-data")showPage("oauth-data");
+    else if(b.dataset.page==="integration")showPage("integration");
     else if(b.textContent.includes("API Keys"))showPage("keys");
     else if(b.textContent.includes("Dashboard")){showPage("keys");toast("Dashboard overview is not implemented in this UI prototype yet.")}
     else if(b.textContent.includes("My Profile")){showPage("keys");toast("Profile settings are not connected in this UI prototype yet.")}

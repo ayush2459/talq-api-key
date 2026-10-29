@@ -29,3 +29,12 @@ services:
         sync: false
       - key: FRONTEND_ORIGINS
         value: "http://localhost:5173,http://127.0.0.1:5173,https://flowsense.onrender.com"
+
+  - type: web
+    name: flowsense-talq-dashboard
+    runtime: static
+    plan: free
+    buildCommand: ""
+    staticPublishPath: ./frontend
+    autoDeployTrigger: commit
+

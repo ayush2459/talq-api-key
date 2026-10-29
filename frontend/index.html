@@ -460,11 +460,11 @@
       oauthExplorerToken=body.access_token;
       oauthExplorerExpiresAt=Date.now()+(Number(body.expires_in)||3600)*1000;
       $("oauthExplorerClientSecret").value="";
+      const candidateAddress=$("oauthExplorerClientAddress").value.trim();
+      if(!candidateAddress) throw new Error("Enter the registered clientAddress UUID for this OAuth client.");
+      oauthExplorerClientAddress=candidateAddress;
       const identity=await explorerRequest("/integration-status");
-      // The integration-status response deliberately provides organization, not clientAddress.
-      // The clientAddress must be the UUID assigned to this client; user supplies it below.
-      oauthExplorerClientAddress=$("oauthExplorerClientAddress").value.trim();
-      if(!oauthExplorerClientAddress) throw new Error("Enter the registered clientAddress UUID for this OAuth client.");
+      if(!identity || !identity.authorized_organization) throw new Error("The gateway did not validate this OAuth client.");
       setExplorerStatus("Authenticated · "+(identity.authorized_organization||"OAuth client"));
       $("oauthExplorerControls").style.display="block";
       $("oauthExplorerMessage").classList.add("hidden");

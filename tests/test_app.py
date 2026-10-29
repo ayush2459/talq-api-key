@@ -237,6 +237,22 @@ def test_oauth_client_credentials_grant_and_scoped_bearer_access(monkeypatch, tm
     assert token_body["client_address"] == "00000000-0000-4000-8000-000000000001"
     assert token_body["organization"] == "Example Org"
 
+    # A token cannot be issued if its linked API key is no longer active.
+    owner = main.SessionLocal()
+    try:
+        linked_client = owner.scalar(select(main.OAuthClient).where(main.OAuthClient.client_id == oauth_client["client_id"]))
+        api_key = owner.get(main.ClientAPIKey, linked_client.api_key_id)
+        api_key.revoked_at = datetime.now(timezone.utc)
+        owner.commit()
+    finally:
+        owner.close()
+    rejected = client.post(
+        "/oauth/token",
+        auth=(oauth_client["client_id"], oauth_client["client_secret"]),
+        data={"grant_type": "client_credentials", "scope": "data:read"},
+    )
+    assert rejected.status_code == 401
+
     # Protected gateway read route accepts OAuth bearer tokens as well as legacy API keys.
     headers = {"Authorization": f"Bearer {token_body['access_token']}"}
     status_response = client.get("/integration-status", headers=headers)

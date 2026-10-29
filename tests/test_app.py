@@ -234,6 +234,8 @@ def test_oauth_client_credentials_grant_and_scoped_bearer_access(monkeypatch, tm
     assert token_body["token_type"] == "Bearer"
     assert token_body["expires_in"] == 3600
     assert token_body["access_token"].startswith("fs_oauth_")
+    assert token_body["client_address"] == "00000000-0000-4000-8000-000000000001"
+    assert token_body["organization"] == "Example Org"
 
     # Protected gateway read route accepts OAuth bearer tokens as well as legacy API keys.
     headers = {"Authorization": f"Bearer {token_body['access_token']}"}
@@ -247,6 +249,36 @@ def test_oauth_client_credentials_grant_and_scoped_bearer_access(monkeypatch, tm
     )
     assert revoked.status_code == 200, revoked.text
     assert client.get("/integration-status", headers=headers).status_code == 401
+
+
+def test_oauth_token_rejects_revoked_underlying_api_key(monkeypatch, tmp_path):
+    client, main = make_client(monkeypatch, tmp_path)
+    request = submit_request(client)
+    telegram_start(client, request)
+    issued = client.post(
+        f"/access-requests/{request['request_id']}/issue-key",
+        json={"request_token": request["request_token"]},
+    )
+    assert issued.status_code == 200, issued.text
+    manager = issued.json()["management_token"]
+    created = client.post(
+        "/auth/managed-oauth-clients",
+        headers={"X-Key-Management-Token": manager},
+        json={"name": "Revocation test client", "scopes": ["data:read"]},
+    )
+    assert created.status_code == 201, created.text
+    oauth_client = created.json()
+    revoked = client.post(
+        f"/auth/managed-api-keys/{issued.json()['api_key_id']}/revoke",
+        headers={"X-Key-Management-Token": manager},
+    )
+    assert revoked.status_code == 200, revoked.text
+    response = client.post(
+        "/oauth/token",
+        auth=(oauth_client["client_id"], oauth_client["client_secret"]),
+        data={"grant_type": "client_credentials", "scope": "data:read"},
+    )
+    assert response.status_code == 401, response.text
 
 
 def test_oauth_rejects_invalid_scope_and_invalid_client(monkeypatch, tmp_path):

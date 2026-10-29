@@ -212,8 +212,10 @@ def require_client_auth(
     if client is None or client.revoked_at is not None:
         raise HTTPException(status_code=401, detail="OAuth client is revoked or unavailable")
     client_api_key = db.get(ClientAPIKey, client.api_key_id)
-    if client_api_key is None:
-        raise HTTPException(status_code=401, detail="OAuth client owner is unavailable")
+    if client_api_key is None or client_api_key.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="OAuth client owner is revoked or unavailable")
+    if _utc(client_api_key.expires_at) is not None and _utc(client_api_key.expires_at) <= now:
+        raise HTTPException(status_code=401, detail="OAuth client owner API key has expired")
     token_scopes = set((token.scopes or "").split())
     path = request.url.path if request is not None else ""
     if path.startswith("/data/"):
@@ -747,13 +749,21 @@ async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[s
     allowed_scopes = set((client.scopes or "").split())
     if not requested_scopes or not requested_scopes.issubset(allowed_scopes):
         raise HTTPException(status_code=400, detail="invalid_scope")
+    # OAuth clients inherit the address and organization from their approved API client.
+    # Do not mint tokens for a revoked or expired underlying client key.
+    owner_key = db.get(ClientAPIKey, client.api_key_id)
+    now = datetime.now(timezone.utc)
+    if owner_key is None or owner_key.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="OAuth client owner is revoked or unavailable")
+    if _utc(owner_key.expires_at) is not None and _utc(owner_key.expires_at) <= now:
+        raise HTTPException(status_code=401, detail="OAuth client owner API key has expired")
     raw_token = "fs_oauth_" + secrets.token_urlsafe(40)
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=3600)
+    expires_at = now + timedelta(seconds=3600)
     db.add(OAuthAccessToken(
         oauth_client_id=client.id,
         token_hash=hash_api_key(raw_token),
         scopes=" ".join(sorted(requested_scopes)),
-        created_at=datetime.now(timezone.utc),
+        created_at=now,
         expires_at=expires_at,
     ))
     db.commit()
@@ -762,6 +772,8 @@ async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[s
         "token_type": "Bearer",
         "expires_in": 3600,
         "scope": " ".join(sorted(requested_scopes)),
+        "client_address": owner_key.client_address,
+        "organization": owner_key.organization,
     }
 
 

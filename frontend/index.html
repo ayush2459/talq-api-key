@@ -67,7 +67,6 @@
             <form id="oauthExplorerForm" class="form-grid" autocomplete="off">
               <div class="field"><label for="oauthExplorerClientId">Client ID</label><input id="oauthExplorerClientId" name="client_id" required autocomplete="off" placeholder="fs_client_…"></div>
               <div class="field"><label for="oauthExplorerClientSecret">Client Secret</label><input id="oauthExplorerClientSecret" name="client_secret" type="password" required autocomplete="new-password" placeholder="fs_secret_…"></div>
-              <div class="field full"><label for="oauthExplorerClientAddress">Registered clientAddress UUID</label><input id="oauthExplorerClientAddress" name="clientAddress" required placeholder="00000000-0000-4000-8000-000000000001"><div class="hint">Must exactly match the UUID bound to this OAuth client.</div></div>
               <div class="field"><label for="oauthExplorerScope">Scope</label><select id="oauthExplorerScope"><option value="data:read">data:read — live data</option><option value="data:read gateway:read">data:read + gateway:read</option></select></div>
               <div class="field" style="justify-content:end"><button class="btn btn-primary" id="oauthExplorerConnect" type="submit">Connect with OAuth 2.0</button></div>
             </form>
@@ -460,11 +459,9 @@
       oauthExplorerToken=body.access_token;
       oauthExplorerExpiresAt=Date.now()+(Number(body.expires_in)||3600)*1000;
       $("oauthExplorerClientSecret").value="";
-      const candidateAddress=$("oauthExplorerClientAddress").value.trim();
-      if(!candidateAddress) throw new Error("Enter the registered clientAddress UUID for this OAuth client.");
-      oauthExplorerClientAddress=candidateAddress;
-      const identity=await explorerRequest("/integration-status");
-      if(!identity || !identity.authorized_organization) throw new Error("The gateway did not validate this OAuth client.");
+      if(!body.client_address) throw new Error("Token response did not include the registered client address. Update the backend and try again.");
+      oauthExplorerClientAddress=body.client_address;
+      setExplorerStatus("Authenticated · "+(body.organization||"OAuth client"));
       setExplorerStatus("Authenticated · "+(identity.authorized_organization||"OAuth client"));
       $("oauthExplorerControls").style.display="block";
       $("oauthExplorerMessage").classList.add("hidden");
@@ -517,7 +514,7 @@
   }
   function disconnectOAuthExplorer(){
     stopExplorerTimer(); oauthExplorerToken=""; oauthExplorerExpiresAt=0; oauthExplorerClientAddress="";
-    $("oauthExplorerClientId").value=""; $("oauthExplorerClientSecret").value=""; $("oauthExplorerClientAddress").value="";
+    $("oauthExplorerClientId").value=""; $("oauthExplorerClientSecret").value="";
     $("oauthExplorerControls").style.display="none"; $("oauthEnergyPanel").style.display="none"; $("oauthWaterPanel").style.display="none";
     $("oauthExplorerMessage").classList.add("hidden"); setExplorerStatus("Not connected");
   }

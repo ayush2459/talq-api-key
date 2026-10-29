@@ -21,6 +21,7 @@
       <button type="button"><span class="nav-icon">⌂</span><span class="nav-label">Dashboard</span></button>
       <button type="button" class="active"><span class="nav-icon">⚿</span><span class="nav-label">API Keys</span></button>
       <button type="button"><span class="nav-icon">♙</span><span class="nav-label">My Profile</span></button>
+      <button type="button" data-page="oauth-data"><span class="nav-icon">◉</span><span class="nav-label">OAuth Data Explorer</span></button>
       <button type="button" data-page="docs"><span class="nav-icon">▤</span><span class="nav-label">Documentation</span></button>
       <button type="button"><span class="nav-icon">ⓘ</span><span class="nav-label">Support</span></button>
     </nav>
@@ -52,6 +53,40 @@
       </section>
       <div class="notice"><span class="notice-icon">ⓘ</span><div><strong>Keep your credentials safe.</strong> Never share an API key publicly or commit it to source control. In the completed application, the backend will store only a hash of each key and enforce expiry and revocation.</div></div>
       <p class="footer-note">FlowSense TALQ Gateway · Backend-connected console · Key metadata is kept in memory for this browser session only.</p>
+      <section class="docs-page" id="oauthDataPage" aria-label="OAuth 2.0 Data Explorer">
+        <div class="docs-hero">
+          <div class="eyebrow" style="color:#8bc2ff">OAuth 2.0 · Client Credentials</div>
+          <h1>Live FlowSense Data Explorer</h1>
+          <p>Authenticate using an OAuth client issued by the gateway, then inspect energy and water readings for every facility or one selected facility. Refreshing retrieves database results; it cannot create new readings.</p>
+          <div style="margin-top:16px"><span class="docs-pill" id="oauthExplorerStatus">Not connected</span></div>
+        </div>
+        <section class="panel" style="margin-bottom:18px">
+          <div class="panel-head"><div><h2>1. Authenticate OAuth client</h2><p>Use the Client ID and Client Secret issued in OAuth 2.0 Applications. Credentials remain in page memory only.</p></div></div>
+          <div style="padding:20px 22px">
+            <div class="docs-warning"><strong>Security:</strong> Client Credentials is intended for confidential server-side clients. Entering a secret into a browser exposes it to that browser session. For production end users, use a backend-for-frontend or Authorization Code + PKCE; do not embed secrets in website code.</div>
+            <form id="oauthExplorerForm" class="form-grid" autocomplete="off">
+              <div class="field"><label for="oauthExplorerClientId">Client ID</label><input id="oauthExplorerClientId" name="client_id" required autocomplete="off" placeholder="fs_client_…"></div>
+              <div class="field"><label for="oauthExplorerClientSecret">Client Secret</label><input id="oauthExplorerClientSecret" name="client_secret" type="password" required autocomplete="new-password" placeholder="fs_secret_…"></div>
+              <div class="field full"><label for="oauthExplorerClientAddress">Registered clientAddress UUID</label><input id="oauthExplorerClientAddress" name="clientAddress" required placeholder="00000000-0000-4000-8000-000000000001"><div class="hint">Must exactly match the UUID bound to this OAuth client.</div></div>
+              <div class="field"><label for="oauthExplorerScope">Scope</label><select id="oauthExplorerScope"><option value="data:read">data:read — live data</option><option value="data:read gateway:read">data:read + gateway:read</option></select></div>
+              <div class="field" style="justify-content:end"><button class="btn btn-primary" id="oauthExplorerConnect" type="submit">Connect with OAuth 2.0</button></div>
+            </form>
+            <div id="oauthExplorerMessage" class="notice hidden" role="status" style="margin-top:14px"></div>
+          </div>
+        </section>
+        <section class="panel" id="oauthExplorerControls" style="margin-bottom:18px;display:none">
+          <div class="panel-head"><div><h2>2. Choose readings</h2><p>All facilities is the default; select a facility to narrow the results.</p></div><button class="btn btn-secondary" id="oauthExplorerDisconnect" type="button">Disconnect</button></div>
+          <div style="padding:20px 22px" class="form-grid">
+            <div class="field"><label for="oauthExplorerFacility">Facility</label><select id="oauthExplorerFacility"><option value="">All facilities</option></select></div>
+            <div class="field"><label for="oauthExplorerHours">Time range</label><select id="oauthExplorerHours"><option value="24">Last 24 hours</option><option value="168">Last 7 days</option><option value="720">Last 30 days</option><option value="8760">Last 365 days</option></select></div>
+            <div class="field"><label for="oauthExplorerRefresh">Automatic refresh</label><select id="oauthExplorerRefresh"><option value="0">Off</option><option value="30">Every 30 seconds</option><option value="60">Every 60 seconds</option><option value="300">Every 5 minutes</option></select></div>
+            <div class="field" style="justify-content:end"><button class="btn btn-primary" id="oauthExplorerRefreshNow" type="button">Refresh readings</button></div>
+          </div>
+          <div style="padding:0 22px 20px"><div class="stats" style="margin-bottom:0"><div class="stat"><div><div class="stat-label">Energy rows</div><div class="stat-value" id="oauthEnergyCount">—</div></div><div class="stat-icon">⚡</div></div><div class="stat"><div><div class="stat-label">Water meter rows</div><div class="stat-value" id="oauthWaterMeterCount">—</div></div><div class="stat-icon">💧</div></div><div class="stat"><div><div class="stat-label">Water sensor rows</div><div class="stat-value" id="oauthWaterSensorCount">—</div></div><div class="stat-icon">◉</div></div></div><p class="footer-note" id="oauthExplorerLastUpdated">No readings loaded yet.</p><div class="notice warn hidden" id="oauthExplorerStaleWarning"></div></div>
+        </section>
+        <section class="panel" id="oauthEnergyPanel" style="display:none;margin-bottom:18px"><div class="panel-head"><div><h2>Energy readings</h2><p>Main energy meter results from the selected time window.</p></div></div><div id="oauthEnergyTable"></div></section>
+        <section class="panel" id="oauthWaterPanel" style="display:none;margin-bottom:18px"><div class="panel-head"><div><h2>Water readings</h2><p>Water meters and water-related IoT sensors.</p></div></div><div id="oauthWaterTable"></div></section>
+      </section>
       <section class="docs-page" id="docsPage" aria-label="Official TALQ specification">
         <div class="docs-hero">
           <div class="eyebrow" style="color:#8bc2ff">Normative specification reference</div>
@@ -378,33 +413,143 @@
     modal('<div class="modal-head"><div><h2>Revoke API key?</h2><p>This action cannot be undone in the production workflow.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><p class="confirm-text">You are about to revoke <span class="danger-name">'+esc(k.name)+'</span>. The backend will immediately reject requests made with this key. Revocation is permanent.</p><div class="modal-actions"><button class="btn btn-secondary" id="cancelRevoke">Cancel</button><div class="right"><button class="btn btn-danger" id="confirmRevoke">Revoke key</button></div></div></div>');
     $("closeModal").onclick=closeModal;$("cancelRevoke").onclick=closeModal;$("confirmRevoke").onclick=async()=>{const b=$("confirmRevoke");b.disabled=true;b.textContent="Revoking…";try{await apiFetch("/auth/managed-api-keys/"+encodeURIComponent(k.id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});k.status="Revoked";persistKeys();closeModal();render();toast("API key revoked by the backend.")}catch(error){toast(error.message);b.disabled=false;b.textContent="Retry revoke"}};
   }
+
+  // OAuth data explorer: do not persist Client Secret or access token to browser storage.
+  let oauthExplorerToken = "";
+  let oauthExplorerExpiresAt = 0;
+  let oauthExplorerClientAddress = "";
+  let oauthExplorerTimer = null;
+  let oauthExplorerInFlight = false;
+  function setExplorerStatus(text){ const node=$("oauthExplorerStatus"); if(node) node.textContent=text; }
+  function explorerMessage(message, warning=false){
+    const node=$("oauthExplorerMessage"); if(!node)return;
+    node.classList.remove("hidden"); node.classList.toggle("warn",warning);
+    node.innerHTML='<span class="notice-icon">'+(warning?'⚠':'ⓘ')+'</span><div>'+esc(message)+'</div>';
+  }
+  function stopExplorerTimer(){ if(oauthExplorerTimer){ clearInterval(oauthExplorerTimer); oauthExplorerTimer=null; } }
+  function scheduleExplorerRefresh(){
+    stopExplorerTimer();
+    const seconds=Number($("oauthExplorerRefresh").value||0);
+    if(seconds>0 && oauthExplorerToken) oauthExplorerTimer=setInterval(()=>loadOAuthExplorerData(),seconds*1000);
+  }
+  async function explorerRequest(path){
+    if(!oauthExplorerToken || Date.now()>=oauthExplorerExpiresAt) throw new Error("OAuth access token expired. Connect again to obtain a new token.");
+    const url=new URL(API_BASE_URL+path);
+    if(oauthExplorerClientAddress) url.searchParams.set("clientAddress",oauthExplorerClientAddress);
+    let res;
+    try { res=await fetch(url.toString(),{headers:{Authorization:"Bearer "+oauthExplorerToken,"talq-api-version":"2.7.1"}}); }
+    catch { throw new Error("Could not reach the FlowSense API. Check backend availability and CORS."); }
+    const body=await res.json().catch(()=>({detail:"Unexpected API response"}));
+    if(!res.ok) throw new Error(body.detail||"Data request failed ("+res.status+")");
+    return body;
+  }
+  async function connectOAuthExplorer(event){
+    event.preventDefault();
+    const id=$("oauthExplorerClientId").value.trim(), secret=$("oauthExplorerClientSecret").value;
+    if(!id||!secret){ explorerMessage("Enter both Client ID and Client Secret.",true); return; }
+    const button=$("oauthExplorerConnect"); button.disabled=true; button.textContent="Authenticating…";
+    try {
+      const form=new URLSearchParams({grant_type:"client_credentials",scope:$("oauthExplorerScope").value});
+      const basic=btoa(unescape(encodeURIComponent(id+":"+secret)));
+      let res;
+      try { res=await fetch(API_BASE_URL+"/oauth/token",{method:"POST",headers:{Authorization:"Basic "+basic,"Content-Type":"application/x-www-form-urlencoded"},body:form.toString()}); }
+      catch { throw new Error("Could not reach the OAuth token endpoint. Check API URL and CORS."); }
+      const body=await res.json().catch(()=>({detail:"Unexpected token response"}));
+      if(!res.ok) throw new Error(body.detail||"OAuth authentication failed ("+res.status+")");
+      if(!body.access_token || String(body.token_type||"").toLowerCase()!=="bearer") throw new Error("The token endpoint did not return a Bearer access token.");
+      oauthExplorerToken=body.access_token;
+      oauthExplorerExpiresAt=Date.now()+(Number(body.expires_in)||3600)*1000;
+      $("oauthExplorerClientSecret").value="";
+      const identity=await explorerRequest("/integration-status");
+      // The integration-status response deliberately provides organization, not clientAddress.
+      // The clientAddress must be the UUID assigned to this client; user supplies it below.
+      oauthExplorerClientAddress=$("oauthExplorerClientAddress").value.trim();
+      if(!oauthExplorerClientAddress) throw new Error("Enter the registered clientAddress UUID for this OAuth client.");
+      setExplorerStatus("Authenticated · "+(identity.authorized_organization||"OAuth client"));
+      $("oauthExplorerControls").style.display="block";
+      $("oauthExplorerMessage").classList.add("hidden");
+      await loadOAuthExplorerFacilities();
+      await loadOAuthExplorerData();
+      scheduleExplorerRefresh();
+    } catch(error) {
+      oauthExplorerToken=""; oauthExplorerExpiresAt=0; oauthExplorerClientAddress="";
+      $("oauthExplorerControls").style.display="none"; setExplorerStatus("Not connected"); explorerMessage(error.message,true);
+    } finally { button.disabled=false; button.textContent="Connect with OAuth 2.0"; }
+  }
+  async function loadOAuthExplorerFacilities(){
+    const body=await explorerRequest("/data/facilities?limit=500");
+    const rows=body.facilities||[];
+    const select=$("oauthExplorerFacility"), prior=select.value;
+    select.innerHTML='<option value="">All facilities</option>'+rows.map(f=>'<option value="'+esc(f.facility_code)+'">'+esc(f.facility_code+' — '+(f.facility_name||""))+'</option>').join('');
+    if(rows.some(f=>f.facility_code===prior))select.value=prior;
+  }
+  function renderExplorerTable(containerId,rows,columns){
+    const area=$(containerId);
+    if(!rows.length){area.innerHTML='<div class="empty"><div class="empty-icon">⌁</div><h3>No readings in this time range</h3><p>No matching records were returned. Try another facility or a larger time range. The dashboard does not fabricate readings.</p></div>';return;}
+    const shown=rows.slice(0,500);
+    area.innerHTML='<div class="table-wrap"><table><thead><tr>'+columns.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'</tr></thead><tbody>'+shown.map(row=>'<tr>'+columns.map(c=>'<td>'+(c.time&&row[c.key]?esc(new Date(row[c.key]).toLocaleString()):esc(row[c.key]===null||row[c.key]===undefined?"—":row[c.key]))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div><div class="footer-note" style="padding:0 20px 16px">'+rows.length+' rows returned'+(rows.length>shown.length?' (first '+shown.length+' shown)':'')+'</div>';
+  }
+  async function loadOAuthExplorerData(){
+    if(!oauthExplorerToken || oauthExplorerInFlight)return;
+    oauthExplorerInFlight=true;
+    $("oauthExplorerLastUpdated").textContent="Refreshing from FlowSense database…";
+    const facility=$("oauthExplorerFacility").value, hours=$("oauthExplorerHours").value;
+    const query=new URLSearchParams({hours,limit:"500"}); if(facility)query.set("facility_code",facility);
+    try {
+      const [energy,water]=await Promise.all([explorerRequest("/data/energy?"+query),explorerRequest("/data/water?"+query)]);
+      $("oauthEnergyCount").textContent=energy.count??(energy.readings||[]).length;
+      $("oauthWaterMeterCount").textContent=water.meter_reading_count??0;
+      $("oauthWaterSensorCount").textContent=water.sensor_reading_count??0;
+      $("oauthEnergyPanel").style.display="block"; $("oauthWaterPanel").style.display="block";
+      renderExplorerTable("oauthEnergyTable",energy.readings||[],[{key:"facility_code",label:"Facility"},{key:"facility_name",label:"Facility name"},{key:"meter_code",label:"Meter"},{key:"reading_value",label:"Reading"},{key:"unit",label:"Unit"},{key:"reading_time",label:"Reading time",time:true},{key:"quality_status",label:"Quality"}]);
+      const merged=[...(water.meter_readings||[]).map(r=>({...r,record_type:"Meter"})),...(water.sensor_readings||[]).map(r=>({...r,record_type:"Sensor",reading_value:r.numeric_value!==null&&r.numeric_value!==undefined?r.numeric_value:r.boolean_value,meter_code:r.sensor_code}))].sort((a,b)=>new Date(b.reading_time)-new Date(a.reading_time));
+      renderExplorerTable("oauthWaterTable",merged,[{key:"facility_code",label:"Facility"},{key:"facility_name",label:"Facility name"},{key:"record_type",label:"Type"},{key:"meter_code",label:"Meter / sensor"},{key:"measurement",label:"Measurement"},{key:"reading_value",label:"Value"},{key:"unit",label:"Unit"},{key:"reading_time",label:"Reading time",time:true},{key:"quality_status",label:"Quality"}]);
+      const all=[...(energy.readings||[]),...merged].map(r=>Date.parse(r.reading_time)).filter(Number.isFinite);
+      const latest=all.length?Math.max(...all):0;
+      $("oauthExplorerLastUpdated").textContent="Last successful query: "+new Date().toLocaleString()+" · Latest returned reading: "+(latest?new Date(latest).toLocaleString():"none");
+      const warn=$("oauthExplorerStaleWarning");
+      if(!latest || Date.now()-latest>30*60*1000){warn.textContent=latest?"STALE DATA: newest returned reading is more than 30 minutes old. Refresh re-queries the database; new sensor ingestion is required for live readings.":"No readings exist for this selection and time range.";warn.classList.remove("hidden");}
+      else warn.classList.add("hidden");
+    } catch(error) {
+      if(/expired|invalid|bearer token/i.test(error.message)){stopExplorerTimer();setExplorerStatus("Session expired");}
+      explorerMessage(error.message,true); $("oauthExplorerLastUpdated").textContent="Refresh failed at "+new Date().toLocaleString();
+    } finally { oauthExplorerInFlight=false; }
+  }
+  function disconnectOAuthExplorer(){
+    stopExplorerTimer(); oauthExplorerToken=""; oauthExplorerExpiresAt=0; oauthExplorerClientAddress="";
+    $("oauthExplorerClientId").value=""; $("oauthExplorerClientSecret").value=""; $("oauthExplorerClientAddress").value="";
+    $("oauthExplorerControls").style.display="none"; $("oauthEnergyPanel").style.display="none"; $("oauthWaterPanel").style.display="none";
+    $("oauthExplorerMessage").classList.add("hidden"); setExplorerStatus("Not connected");
+  }
+
   const docsPage=$("docsPage");
+  const oauthDataPage=$("oauthDataPage");
   const consoleContent=document.querySelector(".content");
-  const originalChildren=Array.from(consoleContent.children).filter(el=>el!==docsPage);
+  const originalChildren=Array.from(consoleContent.children).filter(el=>el!==docsPage && el!==oauthDataPage);
   function showPage(name){
     document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===name || (!b.dataset.page && name==="keys" && b.textContent.includes("API Keys"))));
-    if(name==="docs"){
-      originalChildren.forEach(el=>el.classList.add("hidden-page"));
-      docsPage.classList.add("active");
-      $("createBtn").style.display="none";
-      document.querySelector(".crumb").textContent="Developer Console / Documentation";
-      document.querySelector(".top-title").textContent="TALQ Documentation";
-    }else{
-      docsPage.classList.remove("active");
-      originalChildren.forEach(el=>el.classList.remove("hidden-page"));
-      $("createBtn").style.display="";
-      document.querySelector(".crumb").textContent="Developer Console / API Management";
-      document.querySelector(".top-title").textContent="API Key Console";
-    }
+    originalChildren.forEach(el=>el.classList.toggle("hidden-page",name==="docs"||name==="oauth-data"));
+    docsPage.classList.toggle("active",name==="docs");
+    oauthDataPage.classList.toggle("active",name==="oauth-data");
+    $("createBtn").style.display=name==="keys"?"":"none";
+    document.querySelector(".crumb").textContent="Developer Console / "+(name==="docs"?"Documentation":name==="oauth-data"?"Live Data":"API Management");
+    document.querySelector(".top-title").textContent=name==="docs"?"TALQ Documentation":name==="oauth-data"?"OAuth 2.0 Data Explorer":"API Key Console";
   }
   document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",()=>{
     if(b.dataset.page==="docs")showPage("docs");
+    else if(b.dataset.page==="oauth-data")showPage("oauth-data");
     else if(b.textContent.includes("API Keys"))showPage("keys");
     else if(b.textContent.includes("Dashboard")){showPage("keys");toast("Dashboard overview is not implemented in this UI prototype yet.")}
     else if(b.textContent.includes("My Profile")){showPage("keys");toast("Profile settings are not connected in this UI prototype yet.")}
     else if(b.textContent.includes("Support")){showPage("keys");toast("Support links will be added during backend integration.")}
   }));
   $("createBtn").addEventListener("click",openCreate);$("searchInput").addEventListener("input",render);
+  $("oauthExplorerForm").addEventListener("submit",connectOAuthExplorer);
+  $("oauthExplorerDisconnect").addEventListener("click",disconnectOAuthExplorer);
+  $("oauthExplorerRefreshNow").addEventListener("click",loadOAuthExplorerData);
+  $("oauthExplorerFacility").addEventListener("change",loadOAuthExplorerData);
+  $("oauthExplorerHours").addEventListener("change",loadOAuthExplorerData);
+  $("oauthExplorerRefresh").addEventListener("change",scheduleExplorerRefresh);
   const createOAuthBtn=$("createOAuthBtn");if(createOAuthBtn)createOAuthBtn.onclick=createOAuthClient;
   document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
   render();

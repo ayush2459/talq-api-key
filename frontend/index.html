@@ -470,8 +470,13 @@
       scheduleExplorerRefresh();
     } catch(error) {
       oauthExplorerToken=""; oauthExplorerExpiresAt=0; oauthExplorerClientAddress="";
-      $("oauthExplorerControls").style.display="none"; setExplorerStatus("Not connected"); explorerMessage(error.message,true);
-    } finally { button.disabled=false; button.textContent="Connect with OAuth 2.0"; }
+      $("oauthExplorerControls").style.display="none";
+      $("oauthEnergyPanel").style.display="none"; $("oauthWaterPanel").style.display="none";
+      setExplorerStatus("Not connected"); explorerMessage(error.message,true);
+    } finally {
+      $("oauthExplorerClientSecret").value="";
+      button.disabled=false; button.textContent="Connect with OAuth 2.0";
+    }
   }
   async function loadOAuthExplorerFacilities(){
     const body=await explorerRequest("/data/facilities?limit=500");

@@ -4,110 +4,88 @@ Base URL:
 - Production: `https://flowsense-talq-gateway.onrender.com`
 - Local development: `http://127.0.0.1:8000`
 
-This is server-to-server HTTPS authentication. CORS is not required for calls made directly from one backend to another. Do not expose the API key in browser code, frontend JavaScript, URLs, or logs.
+The browser console calls the gateway only for access-request creation, Telegram verification status, one-time key issuance, and owner-scoped revocation. Never expose `ADMIN_API_KEY` in browser code. For normal application traffic, keep `X-API-Key` on your own backend and call the gateway server-to-server.
 
 ## 1. Request access
 
-Send `POST /access-requests` with JSON:
+`POST /access-requests` JSON:
 
 ```json
 {
   "contact_name": "Integration Contact",
   "email": "integration@example.com",
   "organization": "Partner Organization",
+  "telegram_username": "@example_user",
   "purpose": "Backend integration with FlowSense gateway",
   "client_address": "00000000-0000-4000-8000-000000000001"
 }
 ```
 
-Use the real, stable UUID configured for the partner CMS as `client_address`. Do not use a company slug, hostname, or IP address. The endpoint sends a one-time verification token to the supplied email. The token expires after 30 minutes by default. A request does not issue a key until the email is verified.
+The response contains `request_id`, `request_token`, and `telegram_url`. Open the Telegram link and press Start from the Telegram account whose username was supplied. The request token is a temporary browser secret; keep it in memory and never log it.
 
-## 2. Verify email and receive a key automatically
+## 2. Verify Telegram
 
-The email contains a token. Exchange it by calling:
+The bot receives `/start <one-time-token>` through the configured Telegram webhook. The gateway validates the webhook secret, one-time token, expiration, and Telegram sender username. The user must return to the browser and check the status.
 
 ```http
-POST /verify-email
-Content-Type: application/json
-
-{"token": "<token-from-verification-email>"}
+GET /access-requests/{request_id}/status
+X-Request-Token: <request_token>
 ```
 
-A successful response contains `api_key`, `api_key_id`, `client_address`, `created_at`, `expires_at`, and `lifetime_days`. **Copy the API key immediately**; it is returned once only. The gateway stores only the key hash. There is no manual administrator approval step.
+The response reports `telegram_verified: true` only after successful verification. A typed username by itself does not verify identity.
 
-The verification token is single-use. An invalid, expired, or previously used token is rejected.
+## 3. Issue the API key once
 
-## 3. Verify the key
+After status is verified, exchange the request token:
+
+```http
+POST /access-requests/{request_id}/issue-key
+Content-Type: application/json
+
+{"request_token": "<request_token>"}
+```
+
+The response contains `api_key`, `api_key_id`, `client_address`, `created_at`, `expires_at`, and `lifetime_days`. The raw key is returned once only. Store it in a secret manager; the gateway persists only its hash.
+
+## 4. Verify and use the key
 
 ```http
 GET /auth/verify
 X-API-Key: <issued-client-api-key>
 ```
 
-A successful response confirms authentication and returns safe metadata for the organization and registered client address. A missing, invalid, or revoked key returns HTTP 401.
+Protected gateway routes also require `talq-api-version: 2.7.1` and the exact approved `clientAddress` query parameter.
 
-## 4. Call a gateway route
+## 5. Revoke access
+
+An authenticated key can revoke a key belonging to the same access request:
 
 ```http
-GET /devices?clientAddress=00000000-0000-4000-8000-000000000001
-X-API-Key: <issued-client-api-key>
-talq-api-version: 2.7.1
+POST /auth/api-keys/{key_id}/revoke
+X-API-Key: <active-key-from-the-same-request>
 ```
 
-Use the exact CMS UUID registered with that API key. Gateway routes that require TALQ-style headers reject a mismatched address.
+Administrators can separately list key metadata and revoke keys using `X-Admin-Key`. Never place the admin secret in frontend code. Keys expire after 90 days by default.
 
-## 5. Python example
+## Telegram and deployment requirements
 
-```python
-import os
-import urllib.error
-import urllib.request
+Configure `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and `TELEGRAM_WEBHOOK_SECRET` as backend secrets. The Telegram webhook URL must be publicly reachable over HTTPS. Configure `FRONTEND_ORIGINS` with the exact origin serving the browser UI; CORS is not authentication.
 
-BASE_URL = os.environ["FLOWSENSE_GATEWAY_URL"].rstrip("/")
-API_KEY = os.environ["FLOWSENSE_API_KEY"]
-CLIENT_ADDRESS = os.environ["FLOWSENSE_CLIENT_ADDRESS"]
+The current gateway is a pilot scaffold. Device and data-package lists are placeholders until real FlowSense data is mapped, and the project is not TALQ-certified.
 
-def get_json(path: str):
-    request = urllib.request.Request(
-        f"{BASE_URL}{path}",
-        headers={
-            "X-API-Key": API_KEY,
-            "talq-api-version": "2.7.1",
-            "Accept": "application/json",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=15) as response:
-        return response.read().decode("utf-8")
 
-# Verify authentication first. This route does not require TALQ headers.
-verify_request = urllib.request.Request(
-    f"{BASE_URL}/auth/verify",
-    headers={"X-API-Key": API_KEY, "Accept": "application/json"},
-)
-with urllib.request.urlopen(verify_request, timeout=15) as response:
-    print(response.read().decode("utf-8"))
+## OAuth 2.0 client credentials
 
-# Then call a gateway route using the approved clientAddress.
-print(get_json(f"/devices?clientAddress={CLIENT_ADDRESS}"))
+The verified dashboard owner can create a confidential OAuth client from the **OAuth 2.0 Applications** panel. The client secret is returned once; only its SHA-256 hash is persisted. Exchange it from a trusted backend using HTTP Basic authentication:
+
+```http
+POST /oauth/token
+Authorization: Basic base64(client_id:client_secret)
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&scope=data%3Aread%20gateway%3Aread
 ```
 
-Configure `FLOWSENSE_GATEWAY_URL`, `FLOWSENSE_API_KEY`, and `FLOWSENSE_CLIENT_ADDRESS` as environment variables on the partner backend. Do not hard-code credentials. Keys expire after 90 days by default; the `expires_at` value in the issuance response is authoritative. Obtain a new key by repeating email verification before expiry and update the secret in your backend.
+The response contains an opaque bearer access token valid for 3600 seconds. Only the token hash is stored. Use `Authorization: Bearer <access_token>` for protected read APIs. Data endpoints require `data:read`; other protected gateway read routes require `gateway:read`. The token is bound to the client UUID and must be accompanied by the required `clientAddress` query parameter and `talq-api-version: 2.7.1` header where the TALQ route requires them. Revoking an OAuth client also revokes its active access tokens. Existing `X-API-Key` clients remain supported.
 
-## Important scope limitation
-
-The gateway currently authenticates callers, but `/devices` and `/data-packages` return empty placeholder collections until real FlowSense device/meter data is connected and mapped. Successful authentication therefore does not yet mean live FlowSense data is available. The current scaffold is not a complete or TALQ-certified implementation; confirm the required TALQ operations and payload schemas with the target CMS before production use.
-
-
-## TALQ clientAddress requirement
-
-For TALQ 2.7.1 Gateway operations, the `clientAddress` query parameter is the **CMS address** and must be a UUID. Ask the partner to provide the stable UUID configured for its CMS; do not use a company slug, hostname, or IP address. The gateway binds that UUID to the approved API key. Example only: `00000000-0000-4000-8000-000000000001` (replace with the partner's real CMS UUID).
-
-
-## API-key lifetime and errors
-
-- Default API-key lifetime: 90 days (`API_KEY_LIFETIME_DAYS`).
-- Email verification token lifetime: 30 minutes (`EMAIL_VERIFICATION_MINUTES`).
-- Expired or revoked API keys return HTTP 401. The client should stop retrying with the same key and obtain a fresh key through the email-verification flow.
-- The gateway's administrator can inspect key metadata and expiration with `GET /admin/api-keys`, and revoke a key with `POST /admin/api-keys/{key_id}/revoke`. The administrator key is never sent to the partner.
-- The gateway owner must configure SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, and `SMTP_USE_STARTTLS`) in the deployment secret settings. Do not put SMTP credentials in source control.
-- Before deploying over an existing PostgreSQL database, back it up and apply `migrations/001_email_verification_and_key_expiration.postgresql.sql`. Existing keys are assigned an expiration 90 days after their original creation time.
+Do not store an OAuth client secret in browser JavaScript or a public client. The dashboard is only the credential-management console; token exchange should happen server-to-server.

@@ -17,17 +17,17 @@
 <body>
 <div class="app">
   <aside class="sidebar">
-    <div class="brand"><div class="brand-mark">↗</div><div class="brand-copy"><strong>FlowSense</strong><small>TALQ Gateway</small></div></div>
+    <div class="brand"><div class="brand-mark"></div><div class="brand-copy"><strong>FlowSense</strong><small>TALQ Gateway</small></div></div>
     <nav class="nav" aria-label="Main navigation">
-      <button type="button"><span class="nav-icon">⌂</span><span class="nav-label">Dashboard</span></button>
-      <button type="button" class="active"><span class="nav-icon">⚿</span><span class="nav-label">API Keys</span></button>
-      <button type="button"><span class="nav-icon">♙</span><span class="nav-label">My Profile</span></button>
-      <button type="button" data-page="oauth-data"><span class="nav-icon">◉</span><span class="nav-label">OAuth Data Explorer</span></button>
-      <button type="button" data-page="docs"><span class="nav-icon">▤</span><span class="nav-label">Documentation</span></button>
-      <button type="button" data-page="integration"><span class="nav-icon">⌘</span><span class="nav-label">Backend Integration</span></button>
-      <button type="button"><span class="nav-icon">ⓘ</span><span class="nav-label">Support</span></button>
+      <button type="button"><span class="nav-icon"></span><span class="nav-label">Dashboard</span></button>
+      <button type="button" class="active"><span class="nav-icon"></span><span class="nav-label">API Keys</span></button>
+      <button type="button"><span class="nav-icon"></span><span class="nav-label">My Profile</span></button>
+      <button type="button" data-page="oauth-data"><span class="nav-icon"></span><span class="nav-label">OAuth Data Explorer</span></button>
+      <button type="button" data-page="docs"><span class="nav-icon"></span><span class="nav-label">Documentation</span></button>
+      <button type="button" data-page="integration"><span class="nav-icon"></span><span class="nav-label">Backend Integration</span></button>
+      <button type="button"><span class="nav-icon"></span><span class="nav-label">Support</span></button>
     </nav>
-    <div class="sidebar-bottom">⇥ <span class="bottom-copy">Backend integration preview</span></div>
+    <div class="sidebar-bottom"> <span class="bottom-copy">Backend integration preview</span></div>
   </aside>
   <main class="main">
     <header class="topbar">
@@ -37,27 +37,27 @@
     <div class="content">
       <div class="page-head">
         <div><div class="eyebrow">Access management</div><h1>API Keys</h1><p class="sub">Create and manage credentials for your FlowSense TALQ Gateway integrations.</p></div>
-        <button class="btn btn-primary" id="createBtn"><span>＋</span> Create API Key</button>
+        <button class="btn btn-primary" id="createBtn"><span></span> Create API Key</button>
       </div>
-      <div style="margin-bottom:18px"><span class="demo-tag"><span class="demo-dot"></span> BACKEND INTEGRATION · CONFIGURATION REQUIRED</span></div>
+      <div style="margin-bottom:18px"><span class="demo-tag"><span class="demo-dot"></span> BACKEND INTEGRATION  CONFIGURATION REQUIRED</span></div>
       <section class="stats" aria-label="API key summary">
-        <div class="stat"><div><div class="stat-label">Total keys</div><div class="stat-value" id="totalStat">0</div></div><div class="stat-icon">⚿</div></div>
-        <div class="stat"><div><div class="stat-label">Active keys</div><div class="stat-value" id="activeStat">0</div></div><div class="stat-icon">✓</div></div>
-        <div class="stat"><div><div class="stat-label">Expiring soon</div><div class="stat-value" id="expiringStat">0</div></div><div class="stat-icon">◷</div></div>
+        <div class="stat"><div><div class="stat-label">Total keys</div><div class="stat-value" id="totalStat">0</div></div><div class="stat-icon"></div></div>
+        <div class="stat"><div><div class="stat-label">Active keys</div><div class="stat-value" id="activeStat">0</div></div><div class="stat-icon"></div></div>
+        <div class="stat"><div><div class="stat-label">Expiring soon</div><div class="stat-value" id="expiringStat">0</div></div><div class="stat-icon"></div></div>
       </section>
       <section class="panel">
         <div class="panel-head"><div><h2>Your credentials</h2><p>Secrets are only shown at creation time in the planned production flow.</p></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><input class="search" id="searchInput" type="search" placeholder="Search by name or client UUID" aria-label="Search API keys"><button class="btn btn-secondary" id="connectKeyManagerBtn" type="button">Connect key manager</button></div></div>
         <div id="tableArea"></div>
       </section>
       <section class="panel" id="oauthPanel" style="margin-top:22px">
-        <div class="panel-head"><div><h2>OAuth 2.0 Applications</h2><p>Create confidential client credentials for server-to-server integrations. Client secrets are displayed once.</p></div><button class="btn btn-primary" id="createOAuthBtn">＋ Create OAuth Client</button></div>
-        <div id="oauthTableArea"><div class="empty"><div class="empty-icon">⛨</div><h3>Connect your key manager</h3><p>Use the management token issued after Telegram verification to create and manage OAuth clients.</p><button class="btn btn-secondary" id="connectOAuthManagerBtn">Connect key manager</button></div></div>
+        <div class="panel-head"><div><h2>OAuth 2.0 Applications</h2><p>Create confidential client credentials for server-to-server integrations. Client secrets are displayed once.</p></div><button class="btn btn-primary" id="createOAuthBtn"> Create OAuth Client</button></div>
+        <div id="oauthTableArea"><div class="empty"><div class="empty-icon"></div><h3>Connect your key manager</h3><p>Use the management token issued after Telegram verification to create and manage OAuth clients.</p><button class="btn btn-secondary" id="connectOAuthManagerBtn">Connect key manager</button></div></div>
       </section>
-      <div class="notice"><span class="notice-icon">ⓘ</span><div><strong>Keep your credentials safe.</strong> Never share an API key publicly or commit it to source control. In the completed application, the backend will store only a hash of each key and enforce expiry and revocation.</div></div>
-      <p class="footer-note">FlowSense TALQ Gateway · Backend-connected console · Key metadata is kept in memory for this browser session only.</p>
+      <div class="notice"><span class="notice-icon"></span><div><strong>Keep your credentials safe.</strong> Never share an API key publicly or commit it to source control. In the completed application, the backend will store only a hash of each key and enforce expiry and revocation.</div></div>
+      <p class="footer-note">FlowSense TALQ Gateway  Backend-connected console  Key metadata is kept in memory for this browser session only.</p>
       <section class="docs-page" id="oauthDataPage" aria-label="OAuth 2.0 Data Explorer">
         <div class="docs-hero">
-          <div class="eyebrow" style="color:#8bc2ff">OAuth 2.0 · Client Credentials</div>
+          <div class="eyebrow" style="color:#8bc2ff">OAuth 2.0  Client Credentials</div>
           <h1>Live FlowSense Data Explorer</h1>
           <p>Authenticate using an OAuth client issued by the gateway, then inspect energy and water readings for every facility or one selected facility. Refreshing retrieves database results; it cannot create new readings.</p>
           <div style="margin-top:16px"><span class="docs-pill" id="oauthExplorerStatus">Not connected</span></div>
@@ -67,9 +67,9 @@
           <div style="padding:20px 22px">
             <div class="docs-warning"><strong>Security:</strong> Client Credentials is intended for confidential server-side clients. Entering a secret into a browser exposes it to that browser session. For production end users, use a backend-for-frontend or Authorization Code + PKCE; do not embed secrets in website code.</div>
             <form id="oauthExplorerForm" class="form-grid" autocomplete="off">
-              <div class="field"><label for="oauthExplorerClientId">Client ID</label><input id="oauthExplorerClientId" name="client_id" required autocomplete="off" placeholder="fs_client_…"></div>
-              <div class="field"><label for="oauthExplorerClientSecret">Client Secret</label><input id="oauthExplorerClientSecret" name="client_secret" type="password" required autocomplete="new-password" placeholder="fs_secret_…"></div>
-              <div class="field"><label for="oauthExplorerScope">Scope</label><select id="oauthExplorerScope"><option value="data:read">data:read — read-only data access</option><option value="data:read gateway:read">data:read + gateway:read</option></select></div>
+              <div class="field"><label for="oauthExplorerClientId">Client ID</label><input id="oauthExplorerClientId" name="client_id" required autocomplete="off" placeholder="fs_client_"></div>
+              <div class="field"><label for="oauthExplorerClientSecret">Client Secret</label><input id="oauthExplorerClientSecret" name="client_secret" type="password" required autocomplete="new-password" placeholder="fs_secret_"></div>
+              <div class="field"><label for="oauthExplorerScope">Scope</label><select id="oauthExplorerScope"><option value="data:read">data:read  read-only data access</option><option value="data:read gateway:read">data:read + gateway:read</option></select></div>
               <div class="field" style="justify-content:end"><button class="btn btn-primary" id="oauthExplorerConnect" type="submit">Connect with OAuth 2.0</button></div>
             </form>
             <div id="oauthExplorerMessage" class="notice hidden" role="status" style="margin-top:14px"></div>
@@ -82,7 +82,7 @@
             <div class="field"><label for="oauthExplorerRefresh">Automatic refresh</label><select id="oauthExplorerRefresh"><option value="0">Off</option><option value="30">Every 30 seconds</option><option value="60">Every 60 seconds</option><option value="300">Every 5 minutes</option></select></div>
             <div class="field" style="justify-content:end"><button class="btn btn-primary" id="oauthExplorerRefreshNow" type="button">Refresh readings</button></div>
           </div>
-          <div style="padding:0 22px 20px"><div class="stats" style="margin-bottom:0"><div class="stat"><div><div class="stat-label">Energy rows</div><div class="stat-value" id="oauthEnergyCount">—</div></div><div class="stat-icon">⚡</div></div><div class="stat"><div><div class="stat-label">Water meter rows</div><div class="stat-value" id="oauthWaterMeterCount">—</div></div><div class="stat-icon">💧</div></div><div class="stat"><div><div class="stat-label">Water sensor rows</div><div class="stat-value" id="oauthWaterSensorCount">—</div></div><div class="stat-icon">◉</div></div></div><p class="footer-note" id="oauthExplorerLastUpdated">No readings loaded yet.</p><div class="notice warn hidden" id="oauthExplorerStaleWarning"></div></div>
+          <div style="padding:0 22px 20px"><div class="stats" style="margin-bottom:0"><div class="stat"><div><div class="stat-label">Energy rows</div><div class="stat-value" id="oauthEnergyCount"></div></div><div class="stat-icon"></div></div><div class="stat"><div><div class="stat-label">Water meter rows</div><div class="stat-value" id="oauthWaterMeterCount"></div></div><div class="stat-icon"></div></div><div class="stat"><div><div class="stat-label">Water sensor rows</div><div class="stat-value" id="oauthWaterSensorCount"></div></div><div class="stat-icon"></div></div></div><p class="footer-note" id="oauthExplorerLastUpdated">No readings loaded yet.</p><div class="notice warn hidden" id="oauthExplorerStaleWarning"></div></div>
         </section>
         <section class="panel" id="oauthEnergyPanel" style="display:none;margin-bottom:18px"><div class="panel-head"><div><h2>Energy readings</h2><p>Main energy meter results from the selected time window.</p></div></div><div id="oauthEnergyTable"></div></section>
         <section class="panel" id="oauthWaterPanel" style="display:none;margin-bottom:18px"><div class="panel-head"><div><h2>Water readings</h2><p>Water meters and water-related IoT sensors.</p></div></div><div id="oauthWaterTable"></div></section>
@@ -92,18 +92,18 @@
           <div class="eyebrow" style="color:#8bc2ff">Normative specification reference</div>
           <h1>TALQ Smart City Protocol</h1>
           <p>Official TALQ specification resources and versioned OpenAPI contracts. Use the normative files below for implementation; this page does not replace the official specification.</p>
-          <div style="margin-top:16px"><span class="docs-pill">TALQ Specification 2.7.1 · 16 April 2026</span></div>
+          <div style="margin-top:16px"><span class="docs-pill">TALQ Specification 2.7.1  16 April 2026</span></div>
         </div>
         <section class="docs-section" id="docs-overview"><h2>Official specification files</h2>
           <div class="docs-warning">TALQ defines interoperability between Central Management Software (CMS) and an Outdoor Device Network (ODN) through the Gateway interface. Use the API contract that matches the product role. The official repository and its versioned files are the source of truth for required paths, operations, data types, mandatory fields, responses, and protocol behavior.</div>
           <div class="docs-grid">
-            <article class="docs-card"><h3>1. Approved TALQ specification</h3><p>Human-readable technical specification, protocol concepts, and version history.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/README.md" target="_blank" rel="noreferrer">Open official specification and version index ↗</a></article>
-            <article class="docs-card"><h3>2. TALQ shared data model — 2.7.1</h3><p>Shared TALQ entities and schemas used by both API contracts, including device, function, attribute, event, calendar, and control-program models.</p><a class="docs-link" href="https://raw.githubusercontent.com/TALQ-consortium/TALQ_specification/main/oas/talq-data-model-2-7-1-online.json" target="_blank" rel="noreferrer">Open talq-data-model-2-7-1-online.json ↗</a></article>
-            <article class="docs-card"><h3>3. TALQ Gateway API — 2.7.1</h3><p>Normative OpenAPI contract for the Gateway side: resource paths, HTTP methods, parameters, schemas, responses, and operation definitions.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-api-gateway-2-7-1-online.json" target="_blank" rel="noreferrer">Open talq-api-gateway-2-7-1-online.json ↗</a></article>
-            <article class="docs-card"><h3>4. TALQ CMS API — 2.7.1</h3><p>Normative OpenAPI contract for the Central Management Software side: resource paths, HTTP methods, parameters, schemas, responses, and operation definitions.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-api-cms-2-7-1-online.json" target="_blank" rel="noreferrer">Open talq-api-cms-2-7-1-online.json ↗</a></article>
+            <article class="docs-card"><h3>1. Approved TALQ specification</h3><p>Human-readable technical specification, protocol concepts, and version history.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/README.md" target="_blank" rel="noreferrer">Open official specification and version index </a></article>
+            <article class="docs-card"><h3>2. TALQ shared data model  2.7.1</h3><p>Shared TALQ entities and schemas used by both API contracts, including device, function, attribute, event, calendar, and control-program models.</p><a class="docs-link" href="https://raw.githubusercontent.com/TALQ-consortium/TALQ_specification/main/oas/talq-data-model-2-7-1-online.json" target="_blank" rel="noreferrer">Open talq-data-model-2-7-1-online.json </a></article>
+            <article class="docs-card"><h3>3. TALQ Gateway API  2.7.1</h3><p>Normative OpenAPI contract for the Gateway side: resource paths, HTTP methods, parameters, schemas, responses, and operation definitions.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-api-gateway-2-7-1-online.json" target="_blank" rel="noreferrer">Open talq-api-gateway-2-7-1-online.json </a></article>
+            <article class="docs-card"><h3>4. TALQ CMS API  2.7.1</h3><p>Normative OpenAPI contract for the Central Management Software side: resource paths, HTTP methods, parameters, schemas, responses, and operation definitions.</p><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/oas/talq-api-cms-2-7-1-online.json" target="_blank" rel="noreferrer">Open talq-api-cms-2-7-1-online.json </a></article>
           </div>
         </section>
-        <section class="docs-section" id="flowsense-capabilities"><h2>FlowSense Gateway — five API capability groups</h2>
+        <section class="docs-section" id="flowsense-capabilities"><h2>FlowSense Gateway  five API capability groups</h2>
           <p class="sub">These groups describe the intended integration surface of the FlowSense TALQ Gateway. The API key is a credential used to authenticate a client to the gateway; it does not itself add TALQ operations or prove protocol conformance.</p>
           <div class="docs-grid">
             <article class="docs-card"><h3>1. Device Management</h3><p>Work with supported device records and device-related resources exposed by the Gateway, such as retrieving device information and managing supported device metadata.</p><p><strong>Use case:</strong> a CMS discovers or synchronizes the devices available through the Gateway.</p></article>
@@ -123,7 +123,7 @@
           </tbody></table></div></div>
           <p class="sub" style="margin-top:10px">TALQ 2.7.1 release notes include corrections to the UUID format for <code>clientAddress</code> in some CMS and Gateway methods, and to <code>deviceAddress</code> parameters. Confirm the exact schema and format in the selected operation in the official OpenAPI file.</p>
         </section>
-        <section class="docs-section" id="docs-features"><h2>Gateway API feature areas — five capabilities</h2>
+        <section class="docs-section" id="docs-features"><h2>Gateway API feature areas  five capabilities</h2>
           <p class="sub">The FlowSense TALQ Gateway project groups its planned integration endpoints into the five capability areas below. These describe what a client integration is intended to do; exact operations, request fields, response schemas, and required behavior must be checked against the official TALQ 2.7.1 OpenAPI contracts above.</p>
           <div class="docs-grid">
             <article class="docs-card"><h3>1. Device Management</h3><p>Discover and manage the devices exposed through the Gateway integration, including device identifiers and supported device information, where implemented by the endpoint and TALQ contract.</p><p><strong>Typical use:</strong> a CMS discovers which devices are available to monitor or control.</p></article>
@@ -138,31 +138,31 @@
           <div class="docs-card">
             <p><strong>Example UUID format</strong></p>
             <div class="docs-code">550e8400-e29b-41d4-a716-446655440000</div>
-            <p><strong>macOS — generate a UUID</strong></p>
+            <p><strong>macOS  generate a UUID</strong></p>
             <div class="docs-code">uuidgen</div>
             <p>Open Terminal, run <code>uuidgen</code>, and copy the generated UUID. macOS typically prints uppercase hexadecimal characters; UUID comparison and formatting requirements must follow the official TALQ contract for the operation.</p>
-            <p><strong>Windows — PowerShell</strong></p>
+            <p><strong>Windows  PowerShell</strong></p>
             <div class="docs-code">[guid]::NewGuid().ToString()</div>
             <p>Open PowerShell, run the command, and copy the generated UUID string.</p>
-            <p><strong>Windows — Command Prompt (optional)</strong></p>
+            <p><strong>Windows  Command Prompt (optional)</strong></p>
             <div class="docs-code">powershell -NoProfile -Command "[guid]::NewGuid().ToString()"</div>
             <div class="docs-warning"><strong>Important:</strong> generating a UUID only creates a syntactically valid identifier. It does not register, authorize, or assign a TALQ client. Use the actual <code>clientAddress</code> agreed or assigned for your CMS/Gateway integration, and verify its meaning in the relevant 2.7.1 operation. Do not use an API key as a clientAddress.</div>
           </div>
         </section>
         <section class="docs-section" id="docs-release"><h2>Version and conformance references</h2>
           <div class="docs-card"><ul>
-            <li><a class="docs-link" href="https://flowsense-talq-gateway.onrender.com/docs" target="_blank" rel="noreferrer">FlowSense Gateway API docs (current implemented routes) ↗</a></li>
-            <li><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/README.md" target="_blank" rel="noreferrer">Official release history and 2.7.1 release notes ↗</a></li>
-            <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/specification/" target="_blank" rel="noreferrer">TALQ specification overview ↗</a></li>
-            <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/certification/" target="_blank" rel="noreferrer">Official TALQ certification process ↗</a></li>
-            <li><a class="docs-link" href="https://www.talq-consortium.org/certified-products.html" target="_blank" rel="noreferrer">Official list of TALQ-certified products ↗</a></li>
+            <li><a class="docs-link" href="https://flowsense-talq-gateway.onrender.com/docs" target="_blank" rel="noreferrer">FlowSense Gateway API docs (current implemented routes) </a></li>
+            <li><a class="docs-link" href="https://github.com/TALQ-consortium/TALQ_specification/blob/main/README.md" target="_blank" rel="noreferrer">Official release history and 2.7.1 release notes </a></li>
+            <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/specification/" target="_blank" rel="noreferrer">TALQ specification overview </a></li>
+            <li><a class="docs-link" href="https://www.talq-consortium.org/2-why-talq/certification/" target="_blank" rel="noreferrer">Official TALQ certification process </a></li>
+            <li><a class="docs-link" href="https://www.talq-consortium.org/certified-products.html" target="_blank" rel="noreferrer">Official list of TALQ-certified products </a></li>
           </ul><p style="margin-top:12px;color:#7b8798;font-size:11px">TALQ certification is distinct from implementing an API key workflow or exposing a Swagger UI. Consult the Consortium's current certification requirements for formal conformance.</p></div>
         </section>
       </section>
 
       <section class="docs-page" id="backendIntegrationPage" aria-label="Backend integration guide">
         <div class="docs-hero">
-          <div class="eyebrow" style="color:#8bc2ff">Developer guide · Server-to-server</div>
+          <div class="eyebrow" style="color:#8bc2ff">Developer guide  Server-to-server</div>
           <h1>Connect your backend to FlowSense</h1>
           <p>Follow this end-to-end workflow to request access, obtain credentials, authenticate securely, and read approved FlowSense facility, energy, and water data from your own backend.</p>
           <div style="margin-top:16px"><span class="docs-pill">Recommended: OAuth 2.0 Client Credentials</span></div>
@@ -182,7 +182,7 @@
           <h2>1. Obtain your credentials</h2>
           <div class="docs-grid">
             <article class="docs-card">
-              <h3>Step 1 — Submit an access request</h3>
+              <h3>Step 1  Submit an access request</h3>
               <ol>
                 <li>Open the API Keys tab and choose <strong>Create API Key</strong>.</li>
                 <li>Enter your contact details, organization, Telegram username, purpose, and the real CMS/client UUID assigned to your integration.</li>
@@ -191,7 +191,7 @@
               <p>Use the same organization and Telegram identity throughout the verification flow. A typed Telegram username alone does not complete verification.</p>
             </article>
             <article class="docs-card">
-              <h3>Step 2 — Verify and issue access</h3>
+              <h3>Step 2  Verify and issue access</h3>
               <ol>
                 <li>Press <strong>Start</strong> in the configured Telegram bot from the matching Telegram account.</li>
                 <li>Return to the console and complete the verification/check-status step.</li>
@@ -200,7 +200,7 @@
               </ol>
             </article>
             <article class="docs-card">
-              <h3>Step 3 — Generate OAuth credentials (recommended)</h3>
+              <h3>Step 3  Generate OAuth credentials (recommended)</h3>
               <ol>
                 <li>Use the key-management token issued by the verified flow. If prompted, select <strong>Connect key manager</strong> and enter the management token.</li>
                 <li>Choose <strong>Create OAuth Client</strong>.</li>
@@ -325,15 +325,15 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
             <tr><td><code>GET /data/water</code></td><td>Read water meter and water-related sensor readings.</td><td><code>facility_code</code>, <code>hours</code>, <code>limit</code></td></tr>
             <tr><td><code>GET /data/alerts</code></td><td>Read available alerts and anomaly metadata.</td><td><code>facility_code</code>, <code>status</code>, <code>limit</code></td></tr>
           </tbody></table></div></div>
-          <div class="docs-warning">All data endpoints are read-only. A facility filter is optional under the current access policy. Data returned depends on the configured FlowSense database and available records; a successful API call does not create new sensor readings. Confirm current parameters and response schemas in the <a class="docs-link" href="https://flowsense-talq-gateway.onrender.com/docs" target="_blank" rel="noreferrer">live OpenAPI / Swagger docs ↗</a>.</div>
+          <div class="docs-warning">All data endpoints are read-only. A facility filter is optional under the current access policy. Data returned depends on the configured FlowSense database and available records; a successful API call does not create new sensor readings. Confirm current parameters and response schemas in the <a class="docs-link" href="https://flowsense-talq-gateway.onrender.com/docs" target="_blank" rel="noreferrer">live OpenAPI / Swagger docs </a>.</div>
         </section>
 
         <section class="docs-section" id="integration-troubleshoot">
           <h2>6. Troubleshooting and go-live checklist</h2>
           <div class="docs-grid">
-            <article class="docs-card"><h3>401 — Unauthorized</h3><p>Check that the API key is active, or the Client ID/Secret pair is correct. For OAuth, request a fresh token if it expired. Do not pass a management token as an API key or OAuth secret.</p></article>
-            <article class="docs-card"><h3>403 — Forbidden</h3><p>Confirm the organization matches the verified organization, the credential has not been revoked/expired, and <code>clientAddress</code> matches the registered client UUID.</p></article>
-            <article class="docs-card"><h3>422 — Validation error</h3><p>Check required query parameters, request body, grant type, scope, and the expected UUID format. Review the response detail and live API schema.</p></article>
+            <article class="docs-card"><h3>401  Unauthorized</h3><p>Check that the API key is active, or the Client ID/Secret pair is correct. For OAuth, request a fresh token if it expired. Do not pass a management token as an API key or OAuth secret.</p></article>
+            <article class="docs-card"><h3>403  Forbidden</h3><p>Confirm the organization matches the verified organization, the credential has not been revoked/expired, and <code>clientAddress</code> matches the registered client UUID.</p></article>
+            <article class="docs-card"><h3>422  Validation error</h3><p>Check required query parameters, request body, grant type, scope, and the expected UUID format. Review the response detail and live API schema.</p></article>
             <article class="docs-card"><h3>CORS or connection error</h3><p>Make the request from your backend where possible. Browser CORS policy does not replace authentication; ensure the gateway URL and deployment are reachable over HTTPS.</p></article>
           </div>
           <div class="docs-card">
@@ -345,7 +345,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
               <li>Revoked or compromised credentials are rotated immediately.</li>
               <li>Live endpoint behavior is verified against the deployed gateway and its current schema.</li>
             </ul>
-            <p><a class="docs-link" href="https://github.com/ayush2459/talq-api-key/blob/telegram-backend-integration/CLIENT_INTEGRATION.md" target="_blank" rel="noreferrer">Open the full client integration guide ↗</a></p>
+            <p><a class="docs-link" href="https://github.com/ayush2459/talq-api-key/blob/telegram-backend-integration/CLIENT_INTEGRATION.md" target="_blank" rel="noreferrer">Open the full client integration guide </a></p>
           </div>
         </section>
       </section>
@@ -391,10 +391,10 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   }
   async function refreshOAuthClients(){
     const area=$("oauthTableArea"); if(!area) return;
-    if(!managerToken){ area.innerHTML='<div class="empty"><div class="empty-icon">⛨</div><h3>Connect your key manager</h3><p>Use the management token issued after Telegram verification to manage OAuth clients.</p><button class="btn btn-secondary" id="connectOAuthManagerBtn">Connect key manager</button></div>'; const b=$("connectOAuthManagerBtn");if(b)b.onclick=connectKeyManager;return; }
+    if(!managerToken){ area.innerHTML='<div class="empty"><div class="empty-icon"></div><h3>Connect your key manager</h3><p>Use the management token issued after Telegram verification to manage OAuth clients.</p><button class="btn btn-secondary" id="connectOAuthManagerBtn">Connect key manager</button></div>'; const b=$("connectOAuthManagerBtn");if(b)b.onclick=connectKeyManager;return; }
     try{
       const rows=await apiFetch("/auth/managed-oauth-clients",{headers:{"X-Key-Management-Token":managerToken}});
-      if(!rows.length){area.innerHTML='<div class="empty"><div class="empty-icon">⛨</div><h3>No OAuth clients yet</h3><p>Create an OAuth client for a server-side integration. Keep its client secret out of browser applications and source control.</p></div>';return;}
+      if(!rows.length){area.innerHTML='<div class="empty"><div class="empty-icon"></div><h3>No OAuth clients yet</h3><p>Create an OAuth client for a server-side integration. Keep its client secret out of browser applications and source control.</p></div>';return;}
       area.innerHTML='<div class="table-wrap"><table><thead><tr><th>Application</th><th>Client ID</th><th>Client address</th><th>Scopes</th><th>Status</th><th>Action</th></tr></thead><tbody>'+rows.map(r=>'<tr><td><div class="key-name">'+esc(r.name)+'</div><div class="key-sub">'+esc(r.organization)+'</div></td><td class="mono">'+esc(r.client_id)+'</td><td class="mono">'+esc(r.client_address)+'</td><td>'+esc((r.scopes||[]).join(", "))+'</td><td><span class="status '+(r.revoked?'revoked-status':'active-status')+'">'+(r.revoked?'Revoked':'Active')+'</span></td><td><button class="btn btn-danger" data-oauth-revoke="'+esc(r.id)+'" '+(r.revoked?'disabled':'')+'>Revoke</button></td></tr>').join('')+'</tbody></table></div>';
       area.querySelectorAll("[data-oauth-revoke]").forEach(b=>b.onclick=()=>revokeOAuthClient(b.dataset.oauthRevoke));
     }catch(error){
@@ -403,12 +403,12 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     }
   }
   async function connectKeyManager(){
-    modal('<div class="modal-head"><div><h2>Connect key manager</h2><p>Authenticate to manage your existing API keys and OAuth clients.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="field full"><label for="revokeManagerTokenInput">Management token <span class="required">*</span></label><input id="revokeManagerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_…" required><div class="hint">This token is checked by the gateway and is kept in memory only for this browser session.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManagerConnect">Cancel</button><div class="right"><button class="btn btn-primary" id="validateManagerConnect">Connect</button></div></div></div>');
+    modal('<div class="modal-head"><div><h2>Connect key manager</h2><p>Authenticate to manage your existing API keys and OAuth clients.</p></div><button class="close" id="closeModal" aria-label="Close"></button></div><div class="modal-body"><div class="field full"><label for="revokeManagerTokenInput">Management token <span class="required">*</span></label><input id="revokeManagerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_" required><div class="hint">This token is checked by the gateway and is kept in memory only for this browser session.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManagerConnect">Cancel</button><div class="right"><button class="btn btn-primary" id="validateManagerConnect">Connect</button></div></div></div>');
     $("closeModal").onclick=closeModal;$("cancelManagerConnect").onclick=closeModal;
     $("validateManagerConnect").onclick=async()=>{
       const value=$("revokeManagerTokenInput").value.trim();
       if(!value){toast("Enter your management token.");$("revokeManagerTokenInput").focus();return;}
-      const button=$("validateManagerConnect");button.disabled=true;button.textContent="Validating…";
+      const button=$("validateManagerConnect");button.disabled=true;button.textContent="Validating";
       try{
         const rows=await apiFetch("/auth/managed-api-keys",{headers:{"X-Key-Management-Token":value}});
         managerToken=value;
@@ -427,7 +427,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     const tokenUrl=API_BASE_URL+"/oauth/token";
     const ps='$pair = $env:OAUTH_CLIENT_ID + ":" + $env:OAUTH_CLIENT_SECRET\n$basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pair))\n$form = @{ grant_type = "client_credentials"; scope = "'+client.scopes.join(" ")+'" }\n$token = Invoke-RestMethod -Method Post -Uri "'+tokenUrl+'" -Headers @{ Authorization = "Basic $basic" } -ContentType "application/x-www-form-urlencoded" -Body $form\n$headers = @{ Authorization = "Bearer $($token.access_token)" }\nInvoke-RestMethod -Uri "'+API_BASE_URL+'/data/facilities?clientAddress='+client.client_address+'" -Headers $headers';
     const curl='curl -X POST "'+tokenUrl+'" -u "'+client.client_id+':<CLIENT_SECRET>" -H "Content-Type: application/x-www-form-urlencoded" -d "grant_type=client_credentials&scope='+encodeURIComponent(client.scopes.join(" "))+'"';
-    modal('<div class="modal-head"><div><h2>OAuth client created</h2><p>Save the client secret now; the server stores only its hash.</p></div><button class="close" id="closeOAuthSecret">×</button></div><div class="modal-body"><div class="notice warn"><div><strong>Confidential client only.</strong><br>Never put the client secret in frontend JavaScript, a public repository, or a browser app. Use it only in a trusted server-side application.</div></div><div class="metadata"><span>Application</span><span>'+esc(client.name)+'</span><span>Client ID</span><span>'+esc(client.client_id)+'</span><span>Client secret</span><span><code id="oauthSecretValue">'+esc(client.client_secret)+'</code></span><span>Client address</span><span>'+esc(client.client_address)+'</span><span>Token URL</span><span>'+esc(tokenUrl)+'</span><span>Scopes</span><span>'+esc(client.scopes.join(" "))+'</span></div><div class="modal-actions"><button class="btn btn-secondary" id="copyOAuthClientId">Copy client ID</button><div class="right"><button class="btn btn-secondary" id="copyOAuthSecret">Copy secret</button><button class="btn btn-primary" id="closeOAuthDone">Done</button></div></div><h3 style="margin-top:20px">PowerShell token request</h3><p class="sub">Save the values securely as environment variables in your backend, then run this example. A token expires after 3600 seconds.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1424;color:#e7effa;border-radius:9px;padding:13px;font-size:11px">'+esc('$env:OAUTH_CLIENT_ID = "'+client.client_id+'"\n$env:OAUTH_CLIENT_SECRET = Read-Host "OAuth client secret"\n'+ps)+'</pre></div>',true);
+    modal('<div class="modal-head"><div><h2>OAuth client created</h2><p>Save the client secret now; the server stores only its hash.</p></div><button class="close" id="closeOAuthSecret"></button></div><div class="modal-body"><div class="notice warn"><div><strong>Confidential client only.</strong><br>Never put the client secret in frontend JavaScript, a public repository, or a browser app. Use it only in a trusted server-side application.</div></div><div class="metadata"><span>Application</span><span>'+esc(client.name)+'</span><span>Client ID</span><span>'+esc(client.client_id)+'</span><span>Client secret</span><span><code id="oauthSecretValue">'+esc(client.client_secret)+'</code></span><span>Client address</span><span>'+esc(client.client_address)+'</span><span>Token URL</span><span>'+esc(tokenUrl)+'</span><span>Scopes</span><span>'+esc(client.scopes.join(" "))+'</span></div><div class="modal-actions"><button class="btn btn-secondary" id="copyOAuthClientId">Copy client ID</button><div class="right"><button class="btn btn-secondary" id="copyOAuthSecret">Copy secret</button><button class="btn btn-primary" id="closeOAuthDone">Done</button></div></div><h3 style="margin-top:20px">PowerShell token request</h3><p class="sub">Save the values securely as environment variables in your backend, then run this example. A token expires after 3600 seconds.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1424;color:#e7effa;border-radius:9px;padding:13px;font-size:11px">'+esc('$env:OAUTH_CLIENT_ID = "'+client.client_id+'"\n$env:OAUTH_CLIENT_SECRET = Read-Host "OAuth client secret"\n'+ps)+'</pre></div>',true);
     $("closeOAuthSecret").onclick=closeModal;$("closeOAuthDone").onclick=closeModal;
     $("copyOAuthClientId").onclick=async()=>{try{await navigator.clipboard.writeText(client.client_id);toast("Client ID copied.")}catch{toast("Copy the client ID manually.")}};
     $("copyOAuthSecret").onclick=async()=>{try{await navigator.clipboard.writeText(client.client_secret);toast("Secret copied. Store it in a secret manager.")}catch{toast("Copy the secret manually.")}};
@@ -436,7 +436,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     if(!managerToken){toast("Connect your key management token before revoking credentials.");return;}
     if(!window.confirm("Revoke this OAuth client? Existing access tokens will be revoked too."))return;
     const button=Array.from(document.querySelectorAll("[data-oauth-revoke]")).find(b=>String(b.dataset.oauthRevoke)===String(id));
-    if(button){button.disabled=true;button.textContent="Revoking…";}
+    if(button){button.disabled=true;button.textContent="Revoking";}
     try{
       const result=await apiFetch("/auth/managed-oauth-clients/"+encodeURIComponent(id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});
       if(!result.revoked)throw new Error("The gateway did not confirm OAuth client revocation.");
@@ -445,14 +445,14 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     }catch(error){toast("Could not revoke OAuth client: "+error.message);if(button){button.disabled=false;button.textContent="Retry revoke";}}
   }
   function connectManagerToken(){
-    modal('<div class="modal-head"><div><h2>Generate OAuth credentials</h2><p>Enter your management token and the exact organization registered during Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="field full"><label for="managerTokenInput">Management token <span class="required">*</span></label><input id="managerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_…" required><div class="hint">The token is validated by the backend and is never saved in browser storage.</div></div><div class="field full" style="margin-top:15px"><label for="managerOrganizationInput">Organization <span class="required">*</span></label><input id="managerOrganizationInput" type="text" autocomplete="organization" placeholder="Enter your verified organization name" required><div class="hint">Must match the organization on the verified access request and its active API key.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManager">Cancel</button><div class="right"><button class="btn btn-primary" id="saveManager">Validate &amp; Generate Credentials</button></div></div></div>');
+    modal('<div class="modal-head"><div><h2>Generate OAuth credentials</h2><p>Enter your management token and the exact organization registered during Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close"></button></div><div class="modal-body"><div class="field full"><label for="managerTokenInput">Management token <span class="required">*</span></label><input id="managerTokenInput" type="password" autocomplete="off" placeholder="fs_mgr_" required><div class="hint">The token is validated by the backend and is never saved in browser storage.</div></div><div class="field full" style="margin-top:15px"><label for="managerOrganizationInput">Organization <span class="required">*</span></label><input id="managerOrganizationInput" type="text" autocomplete="organization" placeholder="Enter your verified organization name" required><div class="hint">Must match the organization on the verified access request and its active API key.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="cancelManager">Cancel</button><div class="right"><button class="btn btn-primary" id="saveManager">Validate &amp; Generate Credentials</button></div></div></div>');
     $("closeModal").onclick=closeModal;$("cancelManager").onclick=closeModal;
     $("saveManager").onclick=async()=>{
       const value=$("managerTokenInput").value.trim();
       const organization=$("managerOrganizationInput").value.trim();
       if(!value){toast("Enter your management token.");$("managerTokenInput").focus();return;}
       if(organization.length<2){toast("Enter the verified organization name.");$("managerOrganizationInput").focus();return;}
-      const b=$("saveManager");b.disabled=true;b.textContent="Validating…";
+      const b=$("saveManager");b.disabled=true;b.textContent="Validating";
       try{
         // First authenticate the management token; this endpoint returns only keys in its verified scope.
         const rows=await apiFetch("/auth/managed-api-keys",{headers:{"X-Key-Management-Token":value}});
@@ -461,7 +461,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
         if(!matchingKey){
           throw new Error("Organization does not match an active API key for this management token. Check the organization name.");
         }
-        b.textContent="Generating credentials…";
+        b.textContent="Generating credentials";
         // The backend independently validates token ownership and organization before issuing secrets.
         const result=await apiFetch("/auth/managed-oauth-clients",{
           method:"POST",
@@ -519,22 +519,22 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     const q=$("searchInput").value.trim().toLowerCase();
     const filtered=keys.filter(k=>[k.name,k.organization,k.clientAddress,k.prefix].some(v=>String(v||"").toLowerCase().includes(q)));
     if(!filtered.length){
-      $("tableArea").innerHTML='<div class="empty"><div class="empty-icon">⚿</div><h3>'+(keys.length?'No matching API keys':'No API keys yet')+'</h3><p>'+(keys.length?'Try another search term to find your credential.':'Create an API key to start connecting your client application to the FlowSense TALQ Gateway.')+'</p>'+(keys.length?'':'<button class="btn btn-primary" id="emptyCreate">＋ Create API Key</button>')+'</div>';
+      $("tableArea").innerHTML='<div class="empty"><div class="empty-icon"></div><h3>'+(keys.length?'No matching API keys':'No API keys yet')+'</h3><p>'+(keys.length?'Try another search term to find your credential.':'Create an API key to start connecting your client application to the FlowSense TALQ Gateway.')+'</p>'+(keys.length?'':'<button class="btn btn-primary" id="emptyCreate"> Create API Key</button>')+'</div>';
       const b=$("emptyCreate");if(b)b.onclick=openCreate;return;
     }
     $("tableArea").innerHTML='<div class="table-wrap"><table><thead><tr><th>Key name</th><th>Client address</th><th>Status</th><th>Expiry</th><th>Created</th><th>Actions</th></tr></thead><tbody>'+filtered.map(k=>{
       const activeNow=isActive(k),status=activeNow?'Active':(k.status==="Revoked"?'Revoked':'Expired');
       const cls=status==="Active"?'active-status':status==="Revoked"?'revoked-status':'expired-status';
-      return '<tr><td><div class="key-name">'+esc(k.name)+'</div><div class="key-sub">'+esc(k.organization)+' · '+esc(k.prefix)+'</div></td><td><span class="mono">'+esc(k.clientAddress)+'</span></td><td><span class="status '+cls+'">'+status+'</span></td><td>'+ (k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</td><td>'+esc(fmt(k.createdAt))+'</td><td><button class="btn btn-danger" style="padding:7px 10px;font-size:11px" data-revoke="'+esc(k.id)+'" '+(!activeNow||!managerToken?'disabled title="Connect your key management token to revoke this key"':'')+'>Revoke</button></td></tr>';
+      return '<tr><td><div class="key-name">'+esc(k.name)+'</div><div class="key-sub">'+esc(k.organization)+'  '+esc(k.prefix)+'</div></td><td><span class="mono">'+esc(k.clientAddress)+'</span></td><td><span class="status '+cls+'">'+status+'</span></td><td>'+ (k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</td><td>'+esc(fmt(k.createdAt))+'</td><td><button class="btn btn-danger" style="padding:7px 10px;font-size:11px" data-revoke="'+esc(k.id)+'" '+(!activeNow||!managerToken?'disabled title="Connect your key management token to revoke this key"':'')+'>Revoke</button></td></tr>';
     }).join('')+'</tbody></table></div>';
     document.querySelectorAll("[data-revoke]").forEach(b=>b.addEventListener("click",()=>confirmRevoke(b.dataset.revoke)));
   }
   function modal(html,wide){$("modalRoot").innerHTML='<div class="overlay" id="overlay"><section class="modal '+(wide?'wide':'')+'" role="dialog" aria-modal="true">'+html+'</section></div>';const overlay=$("overlay");overlay.addEventListener("click",e=>{if(e.target===overlay)closeModal()})}
   function closeModal(){$("modalRoot").innerHTML="";currentSecret=null}
-  function stepper(step){return '<div class="steps"><div class="step '+(step===1?'current':step>1?'done':'')+'"><span>'+(step>1?'✓':'1')+'</span> Details</div><div class="step-line"></div><div class="step '+(step===2?'current':step>2?'done':'')+'"><span>'+(step>2?'✓':'2')+'</span> Telegram</div><div class="step-line"></div><div class="step '+(step===3?'current':'')+'"><span>3</span> API key</div></div>'}
+  function stepper(step){return '<div class="steps"><div class="step '+(step===1?'current':step>1?'done':'')+'"><span>'+(step>1?'':'1')+'</span> Details</div><div class="step-line"></div><div class="step '+(step===2?'current':step>2?'done':'')+'"><span>'+(step>2?'':'2')+'</span> Telegram</div><div class="step-line"></div><div class="step '+(step===3?'current':'')+'"><span>3</span> API key</div></div>'}
   function openCreate(){modalStep=1;formData={expiry:"90"};renderForm()}
   function renderForm(){
-    modal('<div class="modal-head"><div><h2>Create a new API key</h2><p>Enter the integration details to begin the verification flow.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body">'+stepper(1)+'<form id="detailsForm" novalidate><div class="form-grid">'+
+    modal('<div class="modal-head"><div><h2>Create a new API key</h2><p>Enter the integration details to begin the verification flow.</p></div><button class="close" id="closeModal" aria-label="Close"></button></div><div class="modal-body">'+stepper(1)+'<form id="detailsForm" novalidate><div class="form-grid">'+
       field("organization","Organization name","text","e.g. ABC Smart Systems",true)+
       field("contactName","Contact name","text","Your full name",true)+
       field("email","Contact email","email","you@company.com",true,"Used for contact and request records; verification happens through Telegram.")+
@@ -542,7 +542,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
       field("clientAddress","Client address (UUID)","text","xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",true,"Use the CMS client UUID assigned to your integration.")+
       '<div class="field full"><label for="purpose">Purpose of integration <span class="required">*</span></label><textarea id="purpose" name="purpose" required placeholder="Briefly explain how your application will use the gateway.">'+esc(formData.purpose||"")+'</textarea><div class="field-error">Please enter an integration purpose.</div></div>'+
       '<div class="field full"><label for="expiry">API key expiry <span class="required">*</span></label><select id="expiry" name="expiry"><option value="90" '+(formData.expiry==="90"?'selected':'')+'>90 days</option><option value="180" '+(formData.expiry==="180"?'selected':'')+'>180 days</option><option value="365" '+(formData.expiry==="365"?'selected':'')+'>365 days</option><option value="never" '+(formData.expiry==="never"?'selected':'')+'>Never (permanent key)</option></select><div class="hint">Permanent keys carry additional security risk and may be restricted by policy.</div></div></div>'+
-      '<div class="modal-actions"><button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button><div class="right"><button type="submit" class="btn btn-primary">Continue to Telegram <span>→</span></button></div></div></form></div>',true);
+      '<div class="modal-actions"><button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button><div class="right"><button type="submit" class="btn btn-primary">Continue to Telegram <span></span></button></div></div></form></div>',true);
     $("closeModal").onclick=closeModal;$("cancelBtn").onclick=closeModal;
     $("detailsForm").addEventListener("submit",e=>{e.preventDefault();const f=e.currentTarget;let ok=true;f.querySelectorAll("[required]").forEach(el=>{const wrap=el.closest(".field");const invalid=!el.value.trim()||(el.name==="clientAddress"&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(el.value.trim()));wrap.classList.toggle("invalid",invalid);if(invalid)ok=false});if(!ok){toast("Please complete all required fields and enter a valid UUID.");return}formData=Object.fromEntries(new FormData(f).entries());submitAccessRequest()});
     ["organization","contactName","email","telegram","clientAddress","purpose","expiry"].forEach(id=>{const el=$(id);if(el&&formData[id])el.value=formData[id]});
@@ -550,7 +550,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   function field(name,label,type,placeholder,required,hint){return '<div class="field"><label for="'+name+'">'+label+(required?' <span class="required">*</span>':'')+'</label><input id="'+name+'" name="'+name+'" type="'+type+'" placeholder="'+esc(placeholder)+'" '+(required?'required':'')+' value="'+esc(formData[name]||"")+'">'+(hint?'<div class="hint">'+esc(hint)+'</div>':'')+'<div class="field-error">Please enter a valid '+label.toLowerCase()+'.</div></div>'}
   async function submitAccessRequest(){
     const submit = $("detailsForm")?.querySelector('button[type="submit"]');
-    if(submit){submit.disabled=true;submit.textContent="Submitting request…";}
+    if(submit){submit.disabled=true;submit.textContent="Submitting request";}
     try{
       const response = await apiFetch("/access-requests",{
         method:"POST",headers:{"Content-Type":"application/json"},
@@ -573,7 +573,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     }
   }
   function renderTelegram(){
-    modal('<div class="modal-head"><div><h2>Verify with Telegram</h2><p>Complete verification using the Telegram account you entered.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body">'+stepper(2)+'<div class="verify-card"><div class="telegram-logo">➤</div><h3>Open the official bot</h3><p>Open Telegram, press Start in the bot, and make sure you are using <strong>'+esc(formData.telegram)+'</strong>. The backend verifies the sender, not just the typed username.</p><a class="btn btn-primary" id="telegramStart" href="'+esc(formData.telegramUrl)+'" target="_blank" rel="noopener noreferrer" style="text-decoration:none">Open Telegram bot ↗</a><div id="telegramStatus" class="verify-demo">Waiting for Telegram verification. This link expires in '+TELEGRAM_EXPIRY_LABEL+'.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="backBtn">← Back</button><div class="right"><button class="btn btn-secondary" id="checkTelegram">Check status</button><button class="btn btn-primary hidden" id="issueRealKey">Issue API key →</button></div></div></div>',true);
+    modal('<div class="modal-head"><div><h2>Verify with Telegram</h2><p>Complete verification using the Telegram account you entered.</p></div><button class="close" id="closeModal" aria-label="Close"></button></div><div class="modal-body">'+stepper(2)+'<div class="verify-card"><div class="telegram-logo"></div><h3>Open the official bot</h3><p>Open Telegram, press Start in the bot, and make sure you are using <strong>'+esc(formData.telegram)+'</strong>. The backend verifies the sender, not just the typed username.</p><a class="btn btn-primary" id="telegramStart" href="'+esc(formData.telegramUrl)+'" target="_blank" rel="noopener noreferrer" style="text-decoration:none">Open Telegram bot </a><div id="telegramStatus" class="verify-demo">Waiting for Telegram verification. This link expires in '+TELEGRAM_EXPIRY_LABEL+'.</div></div><div class="modal-actions"><button class="btn btn-secondary" id="backBtn"> Back</button><div class="right"><button class="btn btn-secondary" id="checkTelegram">Check status</button><button class="btn btn-primary hidden" id="issueRealKey">Issue API key </button></div></div></div>',true);
     $("closeModal").onclick=closeModal;
     $("backBtn").onclick=renderForm;
     $("checkTelegram").onclick=checkTelegramStatus;
@@ -582,7 +582,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   const TELEGRAM_EXPIRY_LABEL = "30 minutes";
   async function checkTelegramStatus(){
     const button=$("checkTelegram"),statusEl=$("telegramStatus");
-    button.disabled=true;button.textContent="Checking…";
+    button.disabled=true;button.textContent="Checking";
     try{
       const status=await apiFetch("/access-requests/"+encodeURIComponent(formData.requestId)+"/status",{
         headers:{"X-Request-Token":formData.requestToken}
@@ -605,7 +605,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     }finally{button.disabled=false;}
   }
   async function issueRealKey(){
-    const button=$("issueRealKey");button.disabled=true;button.textContent="Issuing…";
+    const button=$("issueRealKey");button.disabled=true;button.textContent="Issuing";
     try{
       const result=await apiFetch("/access-requests/"+encodeURIComponent(formData.requestId)+"/issue-key",{
         method:"POST",headers:{"Content-Type":"application/json"},
@@ -615,7 +615,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
         id:result.api_key_id,name:formData.organization+" Integration",
         organization:formData.organization,clientAddress:result.client_address,
         createdAt:new Date(result.created_at),expiresAt:result.expires_at?new Date(result.expires_at):null,
-        status:"Active",prefix:result.api_key.slice(0,15)+"…",apiKey:result.api_key,
+        status:"Active",prefix:result.api_key.slice(0,15)+"",apiKey:result.api_key,
         telegram:formData.telegram,mode:"Live backend"
       };
       keys=[k,...keys.filter(existing=>String(existing.id)!==String(k.id))];
@@ -629,16 +629,16 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     }
   }
   function renderSecret(k,secret,managementToken){
-    modal('<div class="modal-head"><div><h2>API key generated</h2><p>Issued by the FlowSense backend after Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><div class="verify-card"><div class="success-mark">✓</div><h3>Your API key is ready</h3><p>This is a real backend credential. Copy it now; the backend stores only its hash and will not reveal it again.</p></div><div class="notice warn"><span class="notice-icon">⚠</span><div><strong>One-time display</strong><br>Copy this key now and store it in a secure secret manager. It cannot be retrieved again from the backend.</div></div>'+(managementToken?'<div class="notice"><div><strong>Key management token</strong><br>Save this separately. It lets you list and revoke keys in this request scope from another device. The server stores only its hash.</div></div><div class="key-secret"><code id="managerSecretText">'+esc(managementToken)+'</code><button class="btn btn-secondary" id="copyManagerSecret">Copy manager token</button></div>':'')+'<div class="key-secret"><code id="secretText">'+esc(secret)+'</code><button class="btn btn-secondary" id="copySecret">Copy</button></div><div class="metadata"><span>Organization</span><span>'+esc(k.organization)+'</span><span>Client UUID</span><span>'+esc(k.clientAddress)+'</span><span>Expires</span><span>'+(k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</span><span>Telegram</span><span>'+esc(formData.telegram)+'</span><span>Mode</span><span>Live backend credential</span></div><div class="modal-actions"><button class="btn btn-secondary" id="closeWithoutSave">Close</button><div class="right"><button class="btn btn-primary" id="finishDemo">Finish</button></div></div></div>',true);
+    modal('<div class="modal-head"><div><h2>API key generated</h2><p>Issued by the FlowSense backend after Telegram verification.</p></div><button class="close" id="closeModal" aria-label="Close"></button></div><div class="modal-body"><div class="verify-card"><div class="success-mark"></div><h3>Your API key is ready</h3><p>This is a real backend credential. Copy it now; the backend stores only its hash and will not reveal it again.</p></div><div class="notice warn"><span class="notice-icon"></span><div><strong>One-time display</strong><br>Copy this key now and store it in a secure secret manager. It cannot be retrieved again from the backend.</div></div>'+(managementToken?'<div class="notice"><div><strong>Key management token</strong><br>Save this separately. It lets you list and revoke keys in this request scope from another device. The server stores only its hash.</div></div><div class="key-secret"><code id="managerSecretText">'+esc(managementToken)+'</code><button class="btn btn-secondary" id="copyManagerSecret">Copy manager token</button></div>':'')+'<div class="key-secret"><code id="secretText">'+esc(secret)+'</code><button class="btn btn-secondary" id="copySecret">Copy</button></div><div class="metadata"><span>Organization</span><span>'+esc(k.organization)+'</span><span>Client UUID</span><span>'+esc(k.clientAddress)+'</span><span>Expires</span><span>'+(k.expiresAt?esc(fmt(k.expiresAt)):'Never')+'</span><span>Telegram</span><span>'+esc(formData.telegram)+'</span><span>Mode</span><span>Live backend credential</span></div><div class="modal-actions"><button class="btn btn-secondary" id="closeWithoutSave">Close</button><div class="right"><button class="btn btn-primary" id="finishDemo">Finish</button></div></div></div>',true);
     $("closeModal").onclick=closeModal;$("closeWithoutSave").onclick=closeModal;
-    $("copySecret").onclick=async()=>{try{await navigator.clipboard.writeText(secret);toast("API key copied. Store it securely and never commit it to source control.")}catch{toast("Clipboard unavailable — select and copy the key manually.")}};
-    if(managementToken&&$("copyManagerSecret"))$("copyManagerSecret").onclick=async()=>{try{await navigator.clipboard.writeText(managementToken);toast("Management token copied. Keep it private.")}catch{toast("Clipboard unavailable — select and copy the management token manually.")}};
+    $("copySecret").onclick=async()=>{try{await navigator.clipboard.writeText(secret);toast("API key copied. Store it securely and never commit it to source control.")}catch{toast("Clipboard unavailable  select and copy the key manually.")}};
+    if(managementToken&&$("copyManagerSecret"))$("copyManagerSecret").onclick=async()=>{try{await navigator.clipboard.writeText(managementToken);toast("Management token copied. Keep it private.")}catch{toast("Clipboard unavailable  select and copy the management token manually.")}};
     $("finishDemo").onclick=()=>{persistKeys();currentSecret=null;closeModal();render();refreshOAuthClients();toast("Key details saved in this browser. The full secret is not stored.")};
   }
   function confirmRevoke(id){
     const k=keys.find(x=>String(x.id)===String(id));if(!k){toast("Could not find this API key. Refresh the key list and try again.");return;}
-    modal('<div class="modal-head"><div><h2>Revoke API key?</h2><p>This action cannot be undone in the production workflow.</p></div><button class="close" id="closeModal" aria-label="Close">×</button></div><div class="modal-body"><p class="confirm-text">You are about to revoke <span class="danger-name">'+esc(k.name)+'</span>. The backend will immediately reject requests made with this key. Revocation is permanent.</p><div class="modal-actions"><button class="btn btn-secondary" id="cancelRevoke">Cancel</button><div class="right"><button class="btn btn-danger" id="confirmRevoke">Revoke key</button></div></div></div>');
-    $("closeModal").onclick=closeModal;$("cancelRevoke").onclick=closeModal;$("confirmRevoke").onclick=async()=>{const b=$("confirmRevoke");b.disabled=true;b.textContent="Revoking…";try{if(!managerToken)throw new Error("Connect your key management token before revoking credentials.");await apiFetch("/auth/managed-api-keys/"+encodeURIComponent(k.id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});k.status="Revoked";persistKeys();closeModal();await refreshManagedKeys();await refreshOAuthClients();render();toast("API key revoked successfully. The backend will reject future requests with this key.")}catch(error){toast(error.message);b.disabled=false;b.textContent="Retry revoke"}};
+    modal('<div class="modal-head"><div><h2>Revoke API key?</h2><p>This action cannot be undone in the production workflow.</p></div><button class="close" id="closeModal" aria-label="Close"></button></div><div class="modal-body"><p class="confirm-text">You are about to revoke <span class="danger-name">'+esc(k.name)+'</span>. The backend will immediately reject requests made with this key. Revocation is permanent.</p><div class="modal-actions"><button class="btn btn-secondary" id="cancelRevoke">Cancel</button><div class="right"><button class="btn btn-danger" id="confirmRevoke">Revoke key</button></div></div></div>');
+    $("closeModal").onclick=closeModal;$("cancelRevoke").onclick=closeModal;$("confirmRevoke").onclick=async()=>{const b=$("confirmRevoke");b.disabled=true;b.textContent="Revoking";try{if(!managerToken)throw new Error("Connect your key management token before revoking credentials.");await apiFetch("/auth/managed-api-keys/"+encodeURIComponent(k.id)+"/revoke",{method:"POST",headers:{"X-Key-Management-Token":managerToken}});k.status="Revoked";persistKeys();closeModal();await refreshManagedKeys();await refreshOAuthClients();render();toast("API key revoked successfully. The backend will reject future requests with this key.")}catch(error){toast(error.message);b.disabled=false;b.textContent="Retry revoke"}};
   }
 
   // OAuth data explorer: do not persist Client Secret or access token to browser storage.
@@ -651,7 +651,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   function explorerMessage(message, warning=false){
     const node=$("oauthExplorerMessage"); if(!node)return;
     node.classList.remove("hidden"); node.classList.toggle("warn",warning);
-    node.innerHTML='<span class="notice-icon">'+(warning?'⚠':'ⓘ')+'</span><div>'+esc(message)+'</div>';
+    node.innerHTML='<span class="notice-icon">'+(warning?'':'')+'</span><div>'+esc(message)+'</div>';
   }
   function stopExplorerTimer(){ if(oauthExplorerTimer){ clearInterval(oauthExplorerTimer); oauthExplorerTimer=null; } }
   function scheduleExplorerRefresh(){
@@ -674,7 +674,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     event.preventDefault();
     const id=$("oauthExplorerClientId").value.trim(), secret=$("oauthExplorerClientSecret").value;
     if(!id||!secret){ explorerMessage("Enter both Client ID and Client Secret.",true); return; }
-    const button=$("oauthExplorerConnect"); button.disabled=true; button.textContent="Authenticating…";
+    const button=$("oauthExplorerConnect"); button.disabled=true; button.textContent="Authenticating";
     try {
       const form=new URLSearchParams({grant_type:"client_credentials",scope:$("oauthExplorerScope").value});
       const basic=btoa(unescape(encodeURIComponent(id+":"+secret)));
@@ -689,7 +689,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
       $("oauthExplorerClientSecret").value="";
       if(!body.client_address) throw new Error("Token response did not include the registered client address. Update the backend and try again.");
       oauthExplorerClientAddress=body.client_address;
-      setExplorerStatus("Authenticated · "+(body.organization||"OAuth client"));
+      setExplorerStatus("Authenticated  "+(body.organization||"OAuth client"));
       $("oauthExplorerControls").style.display="block";
       $("oauthExplorerMessage").classList.add("hidden");
       await loadOAuthExplorerFacilities();
@@ -709,19 +709,19 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     const body=await explorerRequest("/data/facilities?limit=500");
     const rows=body.facilities||[];
     const select=$("oauthExplorerFacility"), prior=select.value;
-    select.innerHTML='<option value="">All facilities</option>'+rows.map(f=>'<option value="'+esc(f.facility_code)+'">'+esc(f.facility_code+' — '+(f.facility_name||""))+'</option>').join('');
+    select.innerHTML='<option value="">All facilities</option>'+rows.map(f=>'<option value="'+esc(f.facility_code)+'">'+esc(f.facility_code+'  '+(f.facility_name||""))+'</option>').join('');
     if(rows.some(f=>f.facility_code===prior))select.value=prior;
   }
   function renderExplorerTable(containerId,rows,columns){
     const area=$(containerId);
-    if(!rows.length){area.innerHTML='<div class="empty"><div class="empty-icon">⌁</div><h3>No readings in this time range</h3><p>No matching records were returned. Try another facility or a larger time range. The dashboard does not fabricate readings.</p></div>';return;}
+    if(!rows.length){area.innerHTML='<div class="empty"><div class="empty-icon"></div><h3>No readings in this time range</h3><p>No matching records were returned. Try another facility or a larger time range. The dashboard does not fabricate readings.</p></div>';return;}
     const shown=rows.slice(0,500);
-    area.innerHTML='<div class="table-wrap"><table><thead><tr>'+columns.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'</tr></thead><tbody>'+shown.map(row=>'<tr>'+columns.map(c=>'<td>'+(c.time&&row[c.key]?esc(new Date(row[c.key]).toLocaleString()):esc(row[c.key]===null||row[c.key]===undefined?"—":row[c.key]))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div><div class="footer-note" style="padding:0 20px 16px">'+rows.length+' rows returned'+(rows.length>shown.length?' (first '+shown.length+' shown)':'')+'</div>';
+    area.innerHTML='<div class="table-wrap"><table><thead><tr>'+columns.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'</tr></thead><tbody>'+shown.map(row=>'<tr>'+columns.map(c=>'<td>'+(c.time&&row[c.key]?esc(new Date(row[c.key]).toLocaleString()):esc(row[c.key]===null||row[c.key]===undefined?"":row[c.key]))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div><div class="footer-note" style="padding:0 20px 16px">'+rows.length+' rows returned'+(rows.length>shown.length?' (first '+shown.length+' shown)':'')+'</div>';
   }
   async function loadOAuthExplorerData(){
     if(!oauthExplorerToken || oauthExplorerInFlight)return;
     oauthExplorerInFlight=true;
-    $("oauthExplorerLastUpdated").textContent="Refreshing from FlowSense database…";
+    $("oauthExplorerLastUpdated").textContent="Refreshing from FlowSense database";
     const facility=$("oauthExplorerFacility").value, hours=720;
     const query=new URLSearchParams({hours,limit:"500"}); if(facility)query.set("facility_code",facility);
     try {

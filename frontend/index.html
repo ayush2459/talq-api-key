@@ -45,7 +45,7 @@
         <div class="stat"><div><div class="stat-label">Expiring soon</div><div class="stat-value" id="expiringStat">0</div></div><div class="stat-icon">◷</div></div>
       </section>
       <section class="panel">
-        <div class="panel-head"><div><h2>Your credentials</h2><p>Secrets are only shown at creation time in the planned production flow.</p></div><input class="search" id="searchInput" type="search" placeholder="Search by name or client UUID" aria-label="Search API keys"></div>
+        <div class="panel-head"><div><h2>Your credentials</h2><p>Secrets are only shown at creation time in the planned production flow.</p></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><input class="search" id="searchInput" type="search" placeholder="Search by name or client UUID" aria-label="Search API keys"><button class="btn btn-secondary" id="connectKeyManagerBtn" type="button">Connect key manager</button></div></div>
         <div id="tableArea"></div>
       </section>
       <section class="panel" id="oauthPanel" style="margin-top:22px">
@@ -776,7 +776,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     else if(b.textContent.includes("My Profile")){showPage("keys");toast("Profile settings are not connected in this UI prototype yet.")}
     else if(b.textContent.includes("Support")){showPage("keys");toast("Support links will be added during backend integration.")}
   }));
-  $("createBtn").addEventListener("click",openCreate);$("searchInput").addEventListener("input",render);
+  $("createBtn").addEventListener("click",openCreate);$("searchInput").addEventListener("input",render);const connectKeyManagerBtn=$("connectKeyManagerBtn");if(connectKeyManagerBtn)connectKeyManagerBtn.onclick=connectKeyManager;
   $("oauthExplorerForm").addEventListener("submit",connectOAuthExplorer);
   $("oauthExplorerDisconnect").addEventListener("click",disconnectOAuthExplorer);
   $("oauthExplorerRefreshNow").addEventListener("click",loadOAuthExplorerData);

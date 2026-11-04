@@ -779,7 +779,7 @@ def revoke_managed_oauth_client(
 
 @app.post("/oauth/token", tags=["OAuth 2.0"])
 async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
-    """OAuth 2.0 client_credentials grant using HTTP Basic client authentication."""
+    """Issue OAuth tokens using password, refresh_token, or client_credentials grants."""
     content_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
     if content_type != "application/x-www-form-urlencoded":
         raise HTTPException(status_code=415, detail="Use application/x-www-form-urlencoded")

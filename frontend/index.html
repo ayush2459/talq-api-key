@@ -23,6 +23,7 @@
       <button type="button" class="active"><span class="nav-icon"></span><span class="nav-label">API Keys</span></button>
       <button type="button"><span class="nav-icon"></span><span class="nav-label">My Profile</span></button>
       <button type="button" data-page="oauth-data"><span class="nav-icon"></span><span class="nav-label">OAuth Data Explorer</span></button>
+      <button type="button" data-page="oauth-login"><span class="nav-icon"></span><span class="nav-label">OAuth Login</span></button>
       <button type="button" data-page="docs"><span class="nav-icon"></span><span class="nav-label">Documentation</span></button>
       <button type="button" data-page="integration"><span class="nav-icon"></span><span class="nav-label">Backend Integration</span></button>
       <button type="button"><span class="nav-icon"></span><span class="nav-label">Support</span></button>
@@ -55,6 +56,57 @@
       </section>
       <div class="notice"><span class="notice-icon"></span><div><strong>Keep your credentials safe.</strong> Never share an API key publicly or commit it to source control. In the completed application, the backend will store only a hash of each key and enforce expiry and revocation.</div></div>
       <p class="footer-note">FlowSense TALQ Gateway  Backend-connected console  Key metadata is kept in memory for this browser session only.</p>
+      <section class="docs-page" id="oauthLoginPage" aria-label="OAuth username and password login">
+        <div class="docs-hero">
+          <div class="eyebrow" style="color:#8bc2ff">OAuth 2.0  User Authentication</div>
+          <h1>Partner Sign-in</h1>
+          <p>Sign in with the username and password provisioned for your approved FlowSense integration. Access tokens are short-lived; refresh tokens rotate when used.</p>
+          <div style="margin-top:16px"><span class="docs-pill" id="oauthLoginStatus">Signed out</span></div>
+        </div>
+        <section class="panel" style="margin-bottom:18px">
+          <div class="panel-head"><div><h2>Sign in to FlowSense</h2><p>Your credentials are sent to the gateway token endpoint and are not saved in browser storage.</p></div></div>
+          <div style="padding:20px 22px">
+            <form id="oauthPasswordForm" class="form-grid" autocomplete="on">
+              <div class="field"><label for="oauthUsername">Username</label><input id="oauthUsername" name="username" required autocomplete="username" placeholder="Your partner username"></div>
+              <div class="field"><label for="oauthPassword">Password</label><input id="oauthPassword" name="password" type="password" required autocomplete="current-password" placeholder="Your password"></div>
+              <div class="field full"><label for="oauthLoginScope">Access scope</label><select id="oauthLoginScope"><option value="data:read gateway:read">Data and gateway read access</option><option value="data:read">Data read access only</option><option value="gateway:read">Gateway read access only</option></select><div class="hint">Scopes are limited by the permissions configured for the account.</div></div>
+              <div class="field full" style="display:flex;flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-primary" id="oauthPasswordLogin" type="submit">Sign in</button>
+                <button class="btn btn-secondary" id="oauthPasswordClear" type="button">Clear form</button>
+              </div>
+            </form>
+            <div id="oauthLoginMessage" class="notice hidden" role="status" aria-live="polite"></div>
+          </div>
+        </section>
+        <section class="panel" id="oauthSessionPanel" style="margin-bottom:18px;display:none">
+          <div class="panel-head"><div><h2>Active session</h2><p>Session credentials are held in memory only. Closing or reloading this page signs you out.</p></div><span class="status active-status" id="oauthSessionBadge">Active</span></div>
+          <div style="padding:20px 22px">
+            <div class="metadata">
+              <span>Username</span><span id="oauthSessionUsername">-</span>
+              <span>Token type</span><span>Bearer</span>
+              <span>Access token expires</span><span id="oauthAccessExpiry">-</span>
+              <span>Refresh token expires</span><span id="oauthRefreshExpiry">-</span>
+              <span>Granted scopes</span><span id="oauthGrantedScopes">-</span>
+            </div>
+            <div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap">
+              <button class="btn btn-primary" id="oauthRefreshButton" type="button">Refresh session</button>
+              <button class="btn btn-secondary" id="oauthCheckButton" type="button">Test protected API</button>
+              <button class="btn btn-danger" id="oauthLogoutButton" type="button">Revoke session and sign out</button>
+            </div>
+            <div id="oauthSessionResult" class="notice hidden" role="status" aria-live="polite"></div>
+          </div>
+        </section>
+        <section class="docs-card">
+          <h3>How account access works</h3>
+          <ol>
+            <li>An administrator provisions a username/password account and links it to an active, approved API key.</li>
+            <li>Sign in here to receive a short-lived access token and a refresh token.</li>
+            <li>Use the access token as <code>Authorization: Bearer</code> when calling protected gateway endpoints.</li>
+            <li>Refresh before expiry. Each refresh token can be used once; the gateway returns a replacement token pair.</li>
+          </ol>
+          <div class="docs-warning">Do not enter an API key, management token, OAuth client secret, or administrator key here. Only use the username/password assigned to your account. This frontend stores tokens in memory only and is intended as a controlled integration console, not a replacement for a production identity provider.</div>
+        </section>
+      </section>
       <section class="docs-page" id="oauthDataPage" aria-label="OAuth 2.0 Data Explorer">
         <div class="docs-hero">
           <div class="eyebrow" style="color:#8bc2ff">OAuth 2.0  Client Credentials</div>
@@ -751,26 +803,123 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     $("oauthExplorerMessage").classList.add("hidden"); setExplorerStatus("Not connected");
   }
 
+  // Username/password OAuth session. Tokens are deliberately memory-only.
+  let oauthUserSession = null;
+  function showOAuthLoginMessage(message, warning=false, target="oauthLoginMessage"){
+    const node=$(target); if(!node)return;
+    node.textContent=message; node.classList.remove("hidden"); node.classList.toggle("warn",warning);
+  }
+  function updateOAuthSessionUI(){
+    const panel=$("oauthSessionPanel");
+    if(!oauthUserSession){panel.style.display="none";$("oauthLoginStatus").textContent="Signed out";return;}
+    panel.style.display="block";
+    $("oauthLoginStatus").textContent="Signed in as "+oauthUserSession.username;
+    $("oauthSessionUsername").textContent=oauthUserSession.username;
+    $("oauthAccessExpiry").textContent=new Date(oauthUserSession.accessExpiresAt).toLocaleString();
+    $("oauthRefreshExpiry").textContent=new Date(oauthUserSession.refreshExpiresAt).toLocaleString();
+    $("oauthGrantedScopes").textContent=oauthUserSession.scope;
+    $("oauthSessionBadge").textContent=Date.now()<oauthUserSession.accessExpiresAt?"Active":"Access token expired";
+  }
+  async function oauthTokenRequest(formValues){
+    const response=await fetch(API_BASE_URL+"/oauth/token",{
+      method:"POST",
+      headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body:new URLSearchParams(formValues).toString()
+    });
+    const body=await response.json().catch(()=>({detail:"Unexpected token response"}));
+    if(!response.ok)throw new Error(body.detail||"OAuth request failed ("+response.status+")");
+    if(!body.access_token||!body.refresh_token||String(body.token_type||"").toLowerCase()!=="bearer")throw new Error("The gateway did not return the expected access and refresh tokens.");
+    return body;
+  }
+  function saveOAuthTokenPair(body,username){
+    const now=Date.now();
+    oauthUserSession={
+      username:username||oauthUserSession?.username||"",
+      accessToken:body.access_token,
+      refreshToken:body.refresh_token,
+      accessExpiresAt:now+(Number(body.expires_in)||900)*1000,
+      refreshExpiresAt:now+(Number(body.refresh_expires_in)||604800)*1000,
+      scope:body.scope||""
+    };
+    updateOAuthSessionUI();
+  }
+  async function submitOAuthPasswordLogin(event){
+    event.preventDefault();
+    const username=$("oauthUsername").value.trim();
+    const password=$("oauthPassword").value;
+    if(!username||!password){showOAuthLoginMessage("Enter both username and password.",true);return;}
+    const button=$("oauthPasswordLogin");button.disabled=true;button.textContent="Signing in";
+    try{
+      const body=await oauthTokenRequest({grant_type:"password",username,password,scope:$("oauthLoginScope").value});
+      saveOAuthTokenPair(body,username);
+      $("oauthPassword").value="";
+      $("oauthLoginMessage").classList.add("hidden");
+      $("oauthSessionResult").classList.add("hidden");
+      showOAuthLoginMessage("Sign-in successful. Your access and refresh tokens are active.");
+    }catch(error){
+      showOAuthLoginMessage(error.message,true);
+    }finally{button.disabled=false;button.textContent="Sign in";}
+  }
+  async function refreshOAuthUserSession(){
+    if(!oauthUserSession?.refreshToken){showOAuthLoginMessage("Sign in again; no refresh token is available.",true,"oauthSessionResult");return;}
+    const button=$("oauthRefreshButton");button.disabled=true;button.textContent="Refreshing";
+    try{
+      const body=await oauthTokenRequest({grant_type:"refresh_token",refresh_token:oauthUserSession.refreshToken});
+      saveOAuthTokenPair(body);
+      showOAuthLoginMessage("Session refreshed. The previous refresh token has been rotated and cannot be reused.",false,"oauthSessionResult");
+    }catch(error){
+      if(/invalid_grant/i.test(error.message)||Date.now()>=oauthUserSession.refreshExpiresAt){
+        oauthUserSession=null;updateOAuthSessionUI();
+        showOAuthLoginMessage("Your refresh token is invalid or expired. Sign in again.",true,"oauthSessionResult");
+      }else showOAuthLoginMessage(error.message,true,"oauthSessionResult");
+    }finally{button.disabled=false;button.textContent="Refresh session";}
+  }
+  async function testOAuthProtectedApi(){
+    if(!oauthUserSession?.accessToken){showOAuthLoginMessage("Sign in before testing the protected API.",true,"oauthSessionResult");return;}
+    const button=$("oauthCheckButton");button.disabled=true;button.textContent="Testing";
+    try{
+      const response=await fetch(API_BASE_URL+"/integration-status",{headers:{Authorization:"Bearer "+oauthUserSession.accessToken}});
+      const body=await response.json().catch(()=>({detail:"Unexpected API response"}));
+      if(!response.ok)throw new Error(body.detail||"Protected API returned "+response.status);
+      showOAuthLoginMessage("Protected API authentication succeeded. Organization: "+(body.authorized_organization||"approved integration")+". Status: "+(body.status||"available")+".",false,"oauthSessionResult");
+    }catch(error){showOAuthLoginMessage(error.message,true,"oauthSessionResult");}
+    finally{button.disabled=false;button.textContent="Test protected API";}
+  }
+  async function revokeOAuthUserSession(){
+    if(!oauthUserSession?.refreshToken){oauthUserSession=null;updateOAuthSessionUI();return;}
+    const button=$("oauthLogoutButton");button.disabled=true;button.textContent="Revoking";
+    try{
+      await apiFetch("/oauth/revoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({refresh_token:oauthUserSession.refreshToken})});
+      oauthUserSession=null;updateOAuthSessionUI();
+      $("oauthSessionResult").classList.add("hidden");
+      showOAuthLoginMessage("Session revoked successfully. Sign in again to obtain new tokens.");
+    }catch(error){showOAuthLoginMessage("Could not revoke session: "+error.message,true,"oauthSessionResult");}
+    finally{button.disabled=false;button.textContent="Revoke session and sign out";}
+  }
+
   const docsPage=$("docsPage");
   const oauthDataPage=$("oauthDataPage");
+  const oauthLoginPage=$("oauthLoginPage");
   const backendIntegrationPage=$("backendIntegrationPage");
   const consoleContent=document.querySelector(".content");
-  const specialPages=[docsPage,oauthDataPage,backendIntegrationPage];
+  const specialPages=[docsPage,oauthDataPage,oauthLoginPage,backendIntegrationPage];
   const originalChildren=Array.from(consoleContent.children).filter(el=>!specialPages.includes(el));
   function showPage(name){
     document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===name || (!b.dataset.page && name==="keys" && b.textContent.includes("API Keys"))));
     originalChildren.forEach(el=>el.classList.toggle("hidden-page",name!=="keys"));
     docsPage.classList.toggle("active",name==="docs");
     oauthDataPage.classList.toggle("active",name==="oauth-data");
+    oauthLoginPage.classList.toggle("active",name==="oauth-login");
     backendIntegrationPage.classList.toggle("active",name==="integration");
     $("createBtn").style.display=name==="keys"?"":"none";
-    const pageTitle=name==="docs"?"TALQ Documentation":name==="oauth-data"?"OAuth 2.0 Data Explorer":name==="integration"?"Backend Integration":"API Management";
+    const pageTitle=name==="docs"?"TALQ Documentation":name==="oauth-data"?"OAuth 2.0 Data Explorer":name==="oauth-login"?"OAuth Login":name==="integration"?"Backend Integration":"API Management";
     document.querySelector(".crumb").textContent="Developer Console / "+pageTitle;
-    document.querySelector(".top-title").textContent=name==="docs"?"TALQ Documentation":name==="oauth-data"?"OAuth 2.0 Data Explorer":name==="integration"?"Backend Integration Guide":"API Key Console";
+    document.querySelector(".top-title").textContent=name==="docs"?"TALQ Documentation":name==="oauth-data"?"OAuth 2.0 Data Explorer":name==="oauth-login"?"OAuth User Login":name==="integration"?"Backend Integration Guide":"API Key Console";
   }
   document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",()=>{
     if(b.dataset.page==="docs")showPage("docs");
     else if(b.dataset.page==="oauth-data")showPage("oauth-data");
+    else if(b.dataset.page==="oauth-login")showPage("oauth-login");
     else if(b.dataset.page==="integration")showPage("integration");
     else if(b.textContent.includes("API Keys"))showPage("keys");
     else if(b.textContent.includes("Dashboard")){showPage("keys");toast("Dashboard overview is not implemented in this UI prototype yet.")}
@@ -779,6 +928,11 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   }));
   $("createBtn").addEventListener("click",openCreate);$("searchInput").addEventListener("input",render);const connectKeyManagerBtn=$("connectKeyManagerBtn");if(connectKeyManagerBtn)connectKeyManagerBtn.onclick=connectKeyManager;
   $("oauthExplorerForm").addEventListener("submit",connectOAuthExplorer);
+  $("oauthPasswordForm").addEventListener("submit",submitOAuthPasswordLogin);
+  $("oauthPasswordClear").addEventListener("click",()=>{$("oauthUsername").value="";$("oauthPassword").value="";$("oauthLoginMessage").classList.add("hidden");});
+  $("oauthRefreshButton").addEventListener("click",refreshOAuthUserSession);
+  $("oauthCheckButton").addEventListener("click",testOAuthProtectedApi);
+  $("oauthLogoutButton").addEventListener("click",revokeOAuthUserSession);
   $("oauthExplorerDisconnect").addEventListener("click",disconnectOAuthExplorer);
   $("oauthExplorerRefreshNow").addEventListener("click",loadOAuthExplorerData);
   $("oauthExplorerFacility").addEventListener("change",loadOAuthExplorerData);

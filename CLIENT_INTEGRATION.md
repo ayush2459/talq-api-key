@@ -74,9 +74,53 @@ Configure `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and `TELEGRAM_WEBHOOK_S
 The current gateway is a pilot scaffold. Device and data-package lists are placeholders until real FlowSense data is mapped, and the project is not TALQ-certified.
 
 
-## OAuth 2.0 client credentials
+## OAuth 2.0 username/password and refresh-token flow
 
-The verified dashboard owner can create a confidential OAuth client from the **OAuth 2.0 Applications** panel. The client secret is returned once; only its SHA-256 hash is persisted. Exchange it from a trusted backend using HTTP Basic authentication:
+An administrator provisions a username/password account linked to an already-approved, active client API key using `POST /admin/oauth-users` and the `X-Admin-Key` header. Passwords must contain at least 12 characters. The gateway stores only a salted PBKDF2-HMAC-SHA256 password hash. Never send the admin key or user password from browser code.
+
+### 1. Login
+
+`POST /oauth/token` using `application/x-www-form-urlencoded`:
+
+```http
+POST /oauth/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&username=partner_user&password=<password>&scope=data%3Aread%20gateway%3Aread
+```
+
+The response includes `access_token`, `token_type`, `expires_in` (default 900 seconds / 15 minutes), `refresh_token`, `refresh_expires_in` (default 604800 seconds / 7 days), and `scope`. Only token hashes are persisted. Access-token lifetime is configurable with `OAUTH_ACCESS_TOKEN_SECONDS` (60-3600 seconds); refresh lifetime with `OAUTH_REFRESH_TOKEN_DAYS` (1-90 days).
+
+### 2. Call protected APIs
+
+Send `Authorization: Bearer <access_token>`. TALQ routes still require `talq-api-version: 2.7.1` and the approved `clientAddress` query parameter. Data routes require `data:read`; other protected gateway read routes require `gateway:read`.
+
+### 3. Refresh before expiry
+
+Exchange the current refresh token at the same token endpoint:
+
+```http
+POST /oauth/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token&refresh_token=<refresh_token>
+```
+
+The response contains a new access token and a new refresh token. Refresh tokens are single-use and rotated; discard the old refresh token immediately. Reuse of an old refresh token is rejected.
+
+### 4. Revoke a session
+
+`POST /oauth/revoke` JSON:
+
+```json
+{"refresh_token": "<current_refresh_token>"}
+```
+
+This revokes the refresh token and active access tokens for that user. Revoking the underlying approved API key also blocks the user's OAuth access.
+
+### Existing client-credentials flow
+
+The verified dashboard owner can still create a confidential OAuth client from the **OAuth 2.0 Applications** panel. The client secret is returned once; only its SHA-256 hash is persisted. Exchange it from a trusted backend using HTTP Basic authentication:
 
 ```http
 POST /oauth/token

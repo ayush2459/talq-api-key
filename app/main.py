@@ -171,7 +171,7 @@ app.add_middleware(
     allow_origins=FRONTEND_ORIGINS,
     # Permit browser dashboards served from private RFC1918 LAN addresses.
     # Keep credentials disabled; explicit origins remain configurable via .env.
-    allow_origin_regex=r"^https?://(localhost|127\\.0\\.0\\.1|10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3}|172\\.(1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3}):\\d+$",
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|10\.\\d{1,3}\.\\d{1,3}\.\\d{1,3}|192\.168\.\\d{1,3}\.\\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\\d{1,3}\.\\d{1,3}):\\d+$",
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Admin-Key", "X-Request-Token", "X-Key-Management-Token", "X-Telegram-Bot-Api-Secret-Token", "talq-api-version"],

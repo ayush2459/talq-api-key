@@ -46,6 +46,26 @@
         <div class="stat"><div><div class="stat-label">Active keys</div><div class="stat-value" id="activeStat">0</div></div><div class="stat-icon"></div></div>
         <div class="stat"><div><div class="stat-label">Expiring soon</div><div class="stat-value" id="expiringStat">0</div></div><div class="stat-icon"></div></div>
       </section>
+      <section class="panel" id="dashboardOAuthTokenPanel" style="margin:0 0 22px;display:none">
+        <div class="panel-head">
+          <div><h2>OAuth access token</h2><p>Your active bearer token, validity and renewal controls.</p></div>
+          <span class="status active-status" id="dashboardTokenStatus">Active</span>
+        </div>
+        <div style="padding:18px 22px">
+          <div class="metadata">
+            <span>Access token</span><span id="dashboardAccessToken" class="mono" style="overflow-wrap:anywhere">-</span>
+            <span>Access token validity</span><span id="dashboardAccessValidity">-</span>
+            <span>Access token expires</span><span id="dashboardAccessExpiry">-</span>
+            <span>Refresh token validity</span><span id="dashboardRefreshValidity">-</span>
+            <span>Granted scopes</span><span id="dashboardGrantedScopes">-</span>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:15px">
+            <button class="btn btn-primary" id="dashboardRefreshButton" type="button">Renew token now</button>
+            <button class="btn btn-secondary" id="dashboardCopyTokenButton" type="button">Copy access token</button>
+          </div>
+          <div class="footer-note">Automatic renewal is attempted 60 seconds before access-token expiry. Refresh tokens rotate after each successful renewal.</div>
+        </div>
+      </section>
       <section class="panel">
         <div class="panel-head"><div><h2>Your credentials</h2><p>Secrets are only shown at creation time in the planned production flow.</p></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><input class="search" id="searchInput" type="search" placeholder="Search by name or client UUID" aria-label="Search API keys"><button class="btn btn-secondary" id="connectKeyManagerBtn" type="button">Connect key manager</button></div></div>
         <div id="tableArea"></div>
@@ -847,8 +867,14 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   }
   function updateOAuthSessionUI(){
     const panel=$("oauthSessionPanel");
-    if(!oauthUserSession){panel.style.display="none";$("oauthLoginStatus").textContent="Signed out";return;}
+    const dashboardPanel=$("dashboardOAuthTokenPanel");
+    if(!oauthUserSession){
+      panel.style.display="none";$("oauthLoginStatus").textContent="Signed out";
+      if(dashboardPanel)dashboardPanel.style.display="none";
+      return;
+    }
     panel.style.display="block";
+    if(dashboardPanel)dashboardPanel.style.display="block";
     $("oauthLoginStatus").textContent="Signed in as "+oauthUserSession.username;
     $("oauthSessionUsername").textContent=oauthUserSession.username;
     $("oauthAccessToken").textContent=oauthUserSession.accessToken;
@@ -859,6 +885,15 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     $("oauthRefreshExpiry").textContent=new Date(oauthUserSession.refreshExpiresAt).toLocaleString()+" ("+refreshRemaining+" seconds remaining)";
     $("oauthGrantedScopes").textContent=oauthUserSession.scope;
     $("oauthSessionBadge").textContent=accessRemaining>0?"Active":"Access token expired";
+    if(dashboardPanel){
+      $("dashboardAccessToken").textContent=oauthUserSession.accessToken;
+      $("dashboardAccessValidity").textContent=accessRemaining+" seconds remaining";
+      $("dashboardAccessExpiry").textContent=new Date(oauthUserSession.accessExpiresAt).toLocaleString();
+      $("dashboardRefreshValidity").textContent=refreshRemaining+" seconds remaining (expires "+new Date(oauthUserSession.refreshExpiresAt).toLocaleString()+")";
+      $("dashboardGrantedScopes").textContent=oauthUserSession.scope;
+      $("dashboardTokenStatus").textContent=accessRemaining>0?"Active":"Access token expired";
+      $("dashboardTokenStatus").className="status "+(accessRemaining>0?"active-status":"expired-status");
+    }
   }
   async function oauthTokenRequest(formValues){
     const response=await fetch(API_BASE_URL+"/oauth/token",{
@@ -950,7 +985,9 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     if(oauthRefreshInFlight)return;
     oauthRefreshInFlight=true;
     const button=$("oauthRefreshButton");
+    const dashboardButton=$("dashboardRefreshButton");
     if(button){button.disabled=true;button.textContent=automatic?"Auto-refreshing":"Refreshing";}
+    if(dashboardButton){dashboardButton.disabled=true;dashboardButton.textContent=automatic?"Auto-renewing":"Renewing";}
     try{
       const body=await oauthTokenRequest({grant_type:"refresh_token",refresh_token:oauthUserSession.refreshToken});
       saveOAuthTokenPair(body);oauthNextRefreshAttemptAt=0;
@@ -961,7 +998,11 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
         stopOAuthSessionTimer();oauthUserSession=null;updateOAuthSessionUI();setConsoleAuthenticated(false);showPage("oauth-login");
         showOAuthLoginMessage("Your refresh token is invalid or expired. Sign in again.",true,"oauthSessionResult");
       }else if(!automatic)showOAuthLoginMessage(error.message,true,"oauthSessionResult");
-    }finally{oauthRefreshInFlight=false;if(button){button.disabled=false;button.textContent="Refresh session";}}
+    }finally{
+      oauthRefreshInFlight=false;
+      if(button){button.disabled=false;button.textContent="Refresh session";}
+      if(dashboardButton){dashboardButton.disabled=false;dashboardButton.textContent="Renew token now";}
+    }
   }
   async function testOAuthProtectedApi(){
     if(!oauthUserSession?.accessToken){showOAuthLoginMessage("Sign in before testing the protected API.",true,"oauthSessionResult");return;}
@@ -1024,6 +1065,12 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   $("oauthProvisionForm").addEventListener("submit",provisionOAuthUser);
   $("oauthPasswordClear").addEventListener("click",()=>{$("oauthUsername").value="";$("oauthPassword").value="";$("oauthLoginMessage").classList.add("hidden");});
   $("oauthRefreshButton").addEventListener("click",refreshOAuthUserSession);
+  $("dashboardRefreshButton").addEventListener("click",()=>refreshOAuthUserSession(false));
+  $("dashboardCopyTokenButton").addEventListener("click",async()=>{
+    if(!oauthUserSession?.accessToken){toast("No active access token.");return;}
+    try{await navigator.clipboard.writeText(oauthUserSession.accessToken);toast("Access token copied.");}
+    catch{toast("Clipboard access is unavailable in this browser context.");}
+  });
   $("oauthCheckButton").addEventListener("click",testOAuthProtectedApi);
   $("oauthLogoutButton").addEventListener("click",revokeOAuthUserSession);
   $("topLogoutButton").addEventListener("click",revokeOAuthUserSession);

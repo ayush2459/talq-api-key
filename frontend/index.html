@@ -862,6 +862,9 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
       saveOAuthTokenPair(body,username);
       setConsoleAuthenticated(true);
       showPage("keys");
+      render();
+      refreshManagedKeys();
+      refreshOAuthClients();
       $("oauthPassword").value="";
       $("oauthLoginMessage").classList.add("hidden");
       $("oauthSessionResult").classList.add("hidden");

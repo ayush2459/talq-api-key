@@ -107,13 +107,25 @@ TELEGRAM_WEBHOOK_SECRET=
 FRONTEND_ORIGINS=http://127.0.0.1:5500,http://localhost:5500
 ```
 
-Start the service:
+Start the backend (LAN-enabled):
 
 ```powershell
 .\\RUN_WINDOWS.ps1
 ```
 
-Open [Swagger UI](http://127.0.0.1:8000/docs) or the [health endpoint](http://127.0.0.1:8000/health).
+The backend binds to `0.0.0.0:8000` so devices on the same trusted private network can reach it. Find this PC's LAN IPv4 address with `ipconfig`; use `http://<LAN-IP>:8000/docs` for Swagger.
+
+Start the frontend in a **second PowerShell window**:
+
+```powershell
+py -m http.server 5500 --bind 0.0.0.0 --directory frontend
+```
+
+On this PC, open `http://127.0.0.1:5500/`. From another device on the same trusted LAN, open `http://<LAN-IP>:5500/`. The dashboard automatically targets the backend at the same LAN IP on port 8000. No hard-coded LAN IP needs to be edited in the HTML.
+
+Windows Firewall may ask whether Python can accept private-network connections; allow it only on **Private networks**. Do not expose these development servers to public networks or forward ports from your router. Keep `ADMIN_API_KEY` private and do not use the browser admin-provisioning form on an untrusted network.
+
+Open [local Swagger UI](http://127.0.0.1:8000/docs) or the [health endpoint](http://127.0.0.1:8000/health).
 
 ### Run tests
 

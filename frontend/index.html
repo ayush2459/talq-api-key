@@ -33,7 +33,7 @@
   <main class="main">
     <header class="topbar">
       <div><div class="crumb">Developer Console / API Management</div><div class="top-title">API Key Console</div></div>
-      <div class="profile"><div class="avatar">AG</div><div class="user-copy"><strong>Developer</strong><small>Workspace preview</small></div></div>
+      <div class="profile"><button class="btn btn-danger topbar-logout" id="topLogoutButton" type="button" style="display:none">Log out</button><div class="avatar">AG</div><div class="user-copy"><strong>Developer</strong><small>Workspace preview</small></div></div>
     </header>
     <div class="content">
       <div class="page-head">
@@ -870,6 +870,8 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     });
     const bottom=document.querySelector(".sidebar-bottom");
     if(bottom)bottom.style.display=authenticated?"":"none";
+    const topLogout=$("topLogoutButton");
+    if(topLogout)topLogout.style.display=authenticated?"inline-flex":"none";
   }
   async function provisionOAuthUser(event){
     event.preventDefault();
@@ -997,6 +999,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   $("oauthRefreshButton").addEventListener("click",refreshOAuthUserSession);
   $("oauthCheckButton").addEventListener("click",testOAuthProtectedApi);
   $("oauthLogoutButton").addEventListener("click",revokeOAuthUserSession);
+  $("topLogoutButton").addEventListener("click",revokeOAuthUserSession);
   $("oauthExplorerDisconnect").addEventListener("click",disconnectOAuthExplorer);
   $("oauthExplorerRefreshNow").addEventListener("click",loadOAuthExplorerData);
   $("oauthExplorerFacility").addEventListener("change",loadOAuthExplorerData);

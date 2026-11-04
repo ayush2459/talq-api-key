@@ -843,6 +843,14 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     };
     updateOAuthSessionUI();
   }
+  function setConsoleAuthenticated(authenticated){
+    document.querySelectorAll(".nav button").forEach(button=>{
+      const isLogin=button.dataset.page==="oauth-login";
+      button.style.display=authenticated?(isLogin?"none":""):(isLogin?"":"none");
+    });
+    const bottom=document.querySelector(".sidebar-bottom");
+    if(bottom)bottom.style.display=authenticated?"":"none";
+  }
   async function submitOAuthPasswordLogin(event){
     event.preventDefault();
     const username=$("oauthUsername").value.trim();
@@ -852,6 +860,8 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     try{
       const body=await oauthTokenRequest({grant_type:"password",username,password,scope:$("oauthLoginScope").value});
       saveOAuthTokenPair(body,username);
+      setConsoleAuthenticated(true);
+      showPage("keys");
       $("oauthPassword").value="";
       $("oauthLoginMessage").classList.add("hidden");
       $("oauthSessionResult").classList.add("hidden");
@@ -886,11 +896,12 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     finally{button.disabled=false;button.textContent="Test protected API";}
   }
   async function revokeOAuthUserSession(){
-    if(!oauthUserSession?.refreshToken){oauthUserSession=null;updateOAuthSessionUI();return;}
+    if(!oauthUserSession?.refreshToken){oauthUserSession=null;updateOAuthSessionUI();setConsoleAuthenticated(false);showPage("oauth-login");return;}
     const button=$("oauthLogoutButton");button.disabled=true;button.textContent="Revoking";
     try{
       await apiFetch("/oauth/revoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({refresh_token:oauthUserSession.refreshToken})});
       oauthUserSession=null;updateOAuthSessionUI();
+      setConsoleAuthenticated(false);showPage("oauth-login");
       $("oauthSessionResult").classList.add("hidden");
       showOAuthLoginMessage("Session revoked successfully. Sign in again to obtain new tokens.");
     }catch(error){showOAuthLoginMessage("Could not revoke session: "+error.message,true,"oauthSessionResult");}
@@ -905,6 +916,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   const specialPages=[docsPage,oauthDataPage,oauthLoginPage,backendIntegrationPage];
   const originalChildren=Array.from(consoleContent.children).filter(el=>!specialPages.includes(el));
   function showPage(name){
+    if(!oauthUserSession || Date.now()>=oauthUserSession.refreshExpiresAt) name="oauth-login";
     document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===name || (!b.dataset.page && name==="keys" && b.textContent.includes("API Keys"))));
     originalChildren.forEach(el=>el.classList.toggle("hidden-page",name!=="keys"));
     docsPage.classList.toggle("active",name==="docs");
@@ -939,9 +951,10 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   $("oauthExplorerRefresh").addEventListener("change",scheduleExplorerRefresh);
   const createOAuthBtn=$("createOAuthBtn");if(createOAuthBtn)createOAuthBtn.onclick=createOAuthClient;
   document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
-  render();
-  refreshManagedKeys();
-  refreshOAuthClients();
+  // Always start at OAuth sign-in. Dashboard and other console pages stay locked until authentication.
+  setConsoleAuthenticated(false);
+  showPage("oauth-login");
+  updateOAuthSessionUI();
 })();
 </script>
 </body>

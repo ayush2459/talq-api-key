@@ -78,12 +78,29 @@
             <div id="oauthLoginMessage" class="notice hidden" role="status" aria-live="polite"></div>
           </div>
         </section>
+        <details class="panel" style="margin-bottom:18px">
+          <summary style="padding:18px 22px;cursor:pointer;font-weight:750">Administrator: provision a partner login</summary>
+          <div style="padding:0 22px 22px">
+            <p class="sub" style="margin:0 0 14px">Create a username/password account linked to an existing active API key. The administrator key is sent only with this request and is not stored in the browser.</p>
+            <form id="oauthProvisionForm" class="form-grid" autocomplete="off">
+              <div class="field full"><label for="oauthAdminKey">Administrator key (X-Admin-Key)</label><input id="oauthAdminKey" type="password" required autocomplete="off" placeholder="Enter administrator key"></div>
+              <div class="field"><label for="oauthProvisionUsername">Partner username</label><input id="oauthProvisionUsername" required minlength="3" maxlength="120" pattern="[A-Za-z0-9_.@-]{3,120}" placeholder="partner_username"></div>
+              <div class="field"><label for="oauthProvisionPassword">Initial password</label><input id="oauthProvisionPassword" type="password" required minlength="12" maxlength="256" autocomplete="new-password" placeholder="At least 12 characters"></div>
+              <div class="field"><label for="oauthProvisionApiKeyId">Approved API key ID</label><input id="oauthProvisionApiKeyId" type="number" min="1" step="1" required placeholder="e.g. 1"></div>
+              <div class="field" style="justify-content:flex-end"><button class="btn btn-primary" id="oauthProvisionButton" type="submit">Create partner login</button></div>
+            </form>
+            <div id="oauthProvisionMessage" class="notice hidden" role="status" aria-live="polite"></div>
+            <div class="docs-warning">Use this only in a trusted administrative environment. Never publish or share the administrator key. The linked API key must already exist, be approved, active and unexpired.</div>
+          </div>
+        </details>
         <section class="panel" id="oauthSessionPanel" style="margin-bottom:18px;display:none">
           <div class="panel-head"><div><h2>Active session</h2><p>Session credentials are held in memory only. Closing or reloading this page signs you out.</p></div><span class="status active-status" id="oauthSessionBadge">Active</span></div>
           <div style="padding:20px 22px">
             <div class="metadata">
               <span>Username</span><span id="oauthSessionUsername">-</span>
               <span>Token type</span><span>Bearer</span>
+              <span>Access token</span><span id="oauthAccessToken" class="mono" style="overflow-wrap:anywhere">-</span>
+              <span>Access token validity</span><span id="oauthAccessValidity">-</span>
               <span>Access token expires</span><span id="oauthAccessExpiry">-</span>
               <span>Refresh token expires</span><span id="oauthRefreshExpiry">-</span>
               <span>Granted scopes</span><span id="oauthGrantedScopes">-</span>
@@ -815,6 +832,8 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     panel.style.display="block";
     $("oauthLoginStatus").textContent="Signed in as "+oauthUserSession.username;
     $("oauthSessionUsername").textContent=oauthUserSession.username;
+    $("oauthAccessToken").textContent=oauthUserSession.accessToken;
+    $("oauthAccessValidity").textContent=Math.max(0,Math.floor((oauthUserSession.accessExpiresAt-Date.now())/1000))+" seconds remaining";
     $("oauthAccessExpiry").textContent=new Date(oauthUserSession.accessExpiresAt).toLocaleString();
     $("oauthRefreshExpiry").textContent=new Date(oauthUserSession.refreshExpiresAt).toLocaleString();
     $("oauthGrantedScopes").textContent=oauthUserSession.scope;
@@ -838,6 +857,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
       accessToken:body.access_token,
       refreshToken:body.refresh_token,
       accessExpiresAt:now+(Number(body.expires_in)||900)*1000,
+      accessExpiresIn:Number(body.expires_in)||900,
       refreshExpiresAt:now+(Number(body.refresh_expires_in)||604800)*1000,
       scope:body.scope||""
     };
@@ -850,6 +870,34 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
     });
     const bottom=document.querySelector(".sidebar-bottom");
     if(bottom)bottom.style.display=authenticated?"":"none";
+  }
+  async function provisionOAuthUser(event){
+    event.preventDefault();
+    const adminKey=$("oauthAdminKey").value;
+    const username=$("oauthProvisionUsername").value.trim();
+    const password=$("oauthProvisionPassword").value;
+    const apiKeyId=Number($("oauthProvisionApiKeyId").value);
+    const button=$("oauthProvisionButton");
+    if(!adminKey||!username||password.length<12||!Number.isInteger(apiKeyId)||apiKeyId<1){
+      showOAuthLoginMessage("Enter an admin key, valid username, password of at least 12 characters, and approved API key ID.",true,"oauthProvisionMessage");return;
+    }
+    button.disabled=true;button.textContent="Creating account";
+    try{
+      const response=await fetch(API_BASE_URL+"/admin/oauth-users",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","X-Admin-Key":adminKey},
+        body:JSON.stringify({username,password,api_key_id:apiKeyId})
+      });
+      const body=await response.json().catch(()=>({detail:"Unexpected API response"}));
+      if(!response.ok)throw new Error(body.detail||"Account creation failed ("+response.status+")");
+      $("oauthProvisionPassword").value="";
+      $("oauthAdminKey").value="";
+      showOAuthLoginMessage("Partner account created: "+body.username+" (user ID "+body.user_id+"). The partner can now sign in above.","false"==="true","oauthProvisionMessage");
+      $("oauthProvisionForm").reset();
+    }catch(error){
+      showOAuthLoginMessage(error.message,true,"oauthProvisionMessage");
+      $("oauthAdminKey").value="";
+    }finally{button.disabled=false;button.textContent="Create partner login";}
   }
   async function submitOAuthPasswordLogin(event){
     event.preventDefault();
@@ -944,6 +992,7 @@ print("Facilities returned:", len(facilities.get("facilities", [])))</div>
   $("createBtn").addEventListener("click",openCreate);$("searchInput").addEventListener("input",render);const connectKeyManagerBtn=$("connectKeyManagerBtn");if(connectKeyManagerBtn)connectKeyManagerBtn.onclick=connectKeyManager;
   $("oauthExplorerForm").addEventListener("submit",connectOAuthExplorer);
   $("oauthPasswordForm").addEventListener("submit",submitOAuthPasswordLogin);
+  $("oauthProvisionForm").addEventListener("submit",provisionOAuthUser);
   $("oauthPasswordClear").addEventListener("click",()=>{$("oauthUsername").value="";$("oauthPassword").value="";$("oauthLoginMessage").classList.add("hidden");});
   $("oauthRefreshButton").addEventListener("click",refreshOAuthUserSession);
   $("oauthCheckButton").addEventListener("click",testOAuthProtectedApi);

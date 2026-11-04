@@ -18,9 +18,11 @@ The raw client API key and request token must never be logged or stored in brows
 
 ## OAuth 2.0 integration
 
-The dashboard includes an OAuth 2.0 Applications panel for the Telegram-verified owner. It creates confidential OAuth clients linked to the same verified integration and client UUID. The client secret is returned once and only its hash is stored. Server-side integrations exchange credentials at `POST /oauth/token` using the OAuth 2.0 `client_credentials` grant and receive a one-hour opaque Bearer access token.
+The gateway supports two OAuth token flows. For the requested username/password workflow, an administrator provisions a user with `POST /admin/oauth-users`, linked to an already-approved client API key. The user exchanges username/password at `POST /oauth/token` with `grant_type=password` and receives a 15-minute opaque Bearer access token plus a 7-day refresh token by default. The client renews tokens using `grant_type=refresh_token`; refresh tokens are single-use and rotated. `POST /oauth/revoke` revokes the refresh token and the user's active access tokens. Passwords are stored as salted PBKDF2-HMAC-SHA256 hashes and only token hashes are stored.
 
-Scopes are restricted to `data:read` and `gateway:read`. Use `Authorization: Bearer <access_token>` on supported read-only gateway routes; legacy `X-API-Key` access remains supported. Revoking an OAuth client revokes its outstanding access tokens. Do not place client secrets in frontend code. See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for token exchange examples.
+The existing OAuth 2.0 Applications panel and confidential `client_credentials` flow remain supported. Scopes are restricted to `data:read` and `gateway:read`. Use `Authorization: Bearer <access_token>` on supported read-only gateway routes; legacy `X-API-Key` access remains supported. Do not place credentials in frontend code. See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for both token flows.
+
+**OAuth security note:** The username/password exchange is a compatibility password grant. The OAuth 2.0 Resource Owner Password Credentials grant is deprecated and is not recommended for new OAuth deployments; use Authorization Code with PKCE for interactive end-user sign-in where possible.
 
 ### OAuth 2.0 Data Explorer dashboard tab
 

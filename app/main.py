@@ -109,6 +109,41 @@ class OAuthAccessToken(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class OAuthUser(Base):
+    """Username/password principal linked to an already-approved TALQ client API key."""
+    __tablename__ = "oauth_users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    password_salt: Mapped[str] = mapped_column(String(64))
+    password_hash: Mapped[str] = mapped_column(String(128))
+    api_key_id: Mapped[int] = mapped_column(ForeignKey("client_api_keys.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OAuthUserAccessToken(Base):
+    __tablename__ = "oauth_user_access_tokens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("oauth_users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    scopes: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OAuthRefreshToken(Base):
+    __tablename__ = "oauth_refresh_tokens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("oauth_users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    scopes: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ClientAPIKey(Base):
     __tablename__ = "client_api_keys"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -206,7 +241,21 @@ def require_client_auth(
     if not raw_token:
         raise HTTPException(status_code=401, detail="Bearer token required")
     token = db.scalar(select(OAuthAccessToken).where(OAuthAccessToken.token_hash == hash_api_key(raw_token)))
-    if token is None or token.revoked_at is not None or _utc(token.expires_at) <= now:
+    if token is None:
+        user_token = db.scalar(select(OAuthUserAccessToken).where(OAuthUserAccessToken.token_hash == hash_api_key(raw_token)))
+        if user_token is None or user_token.revoked_at is not None or _utc(user_token.expires_at) <= now:
+            raise HTTPException(status_code=401, detail="Invalid, expired, or revoked access token")
+        oauth_user = db.get(OAuthUser, user_token.user_id)
+        if oauth_user is None or oauth_user.revoked_at is not None:
+            raise HTTPException(status_code=401, detail="OAuth user is revoked or unavailable")
+        client_api_key = db.get(ClientAPIKey, oauth_user.api_key_id)
+        if client_api_key is None or client_api_key.revoked_at is not None or (_utc(client_api_key.expires_at) and _utc(client_api_key.expires_at) <= now):
+            raise HTTPException(status_code=401, detail="OAuth user's approved client credential is revoked or expired")
+        required_scope = "data:read" if path.startswith("/data/") else "gateway:read"
+        if required_scope not in set((user_token.scopes or "").split()):
+            raise HTTPException(status_code=403, detail=f"OAuth token lacks required scope: {required_scope}")
+        return ClientIdentity(client_api_key.organization, client_api_key.client_address, "oauth_password", oauth_user.id)
+    if token.revoked_at is not None or _utc(token.expires_at) <= now:
         raise HTTPException(status_code=401, detail="Invalid, expired, or revoked access token")
     client = db.get(OAuthClient, token.oauth_client_id)
     if client is None or client.revoked_at is not None:
@@ -738,7 +787,38 @@ async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[s
         form = await request.form()
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid form body") from exc
-    if form.get("grant_type") != "client_credentials":
+    grant_type = str(form.get("grant_type") or "")
+    if grant_type == "password":
+        username = str(form.get("username") or "").strip()
+        password = str(form.get("password") or "")
+        user = db.scalar(select(OAuthUser).where(OAuthUser.username == username))
+        if user is None or user.revoked_at is not None or not secrets.compare_digest(user.password_hash, _password_digest(password, user.password_salt)):
+            raise HTTPException(status_code=400, detail="invalid_grant")
+        client_key = db.get(ClientAPIKey, user.api_key_id)
+        now = datetime.now(timezone.utc)
+        if client_key is None or client_key.revoked_at is not None or (_utc(client_key.expires_at) and _utc(client_key.expires_at) <= now):
+            raise HTTPException(status_code=400, detail="invalid_grant")
+        requested = set(str(form.get("scope") or "data:read gateway:read").split())
+        if not requested or not requested.issubset({"data:read", "gateway:read"}):
+            raise HTTPException(status_code=400, detail="invalid_scope")
+        return _issue_user_tokens(user, requested, db)
+    if grant_type == "refresh_token":
+        raw_refresh = str(form.get("refresh_token") or "").strip()
+        old = db.scalar(select(OAuthRefreshToken).where(OAuthRefreshToken.token_hash == hash_api_key(raw_refresh))) if raw_refresh else None
+        now = datetime.now(timezone.utc)
+        if old is None or old.used_at is not None or old.revoked_at is not None or _utc(old.expires_at) <= now:
+            raise HTTPException(status_code=400, detail="invalid_grant")
+        user = db.get(OAuthUser, old.user_id)
+        client_key = db.get(ClientAPIKey, user.api_key_id) if user else None
+        if user is None or user.revoked_at is not None or client_key is None or client_key.revoked_at is not None or (_utc(client_key.expires_at) and _utc(client_key.expires_at) <= now):
+            raise HTTPException(status_code=400, detail="invalid_grant")
+        consumed = db.execute(update(OAuthRefreshToken).where(OAuthRefreshToken.id == old.id, OAuthRefreshToken.used_at.is_(None), OAuthRefreshToken.revoked_at.is_(None)).values(used_at=now))
+        if consumed.rowcount != 1:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="invalid_grant")
+        db.commit()
+        return _issue_user_tokens(user, set((old.scopes or "").split()), db)
+    if grant_type != "client_credentials":
         raise HTTPException(status_code=400, detail="unsupported_grant_type")
     client_id = ""
     client_secret = ""
@@ -788,6 +868,62 @@ async def oauth_token(request: Request, db: Session = Depends(get_db)) -> dict[s
         "client_address": owner_key.client_address,
         "organization": owner_key.organization,
     }
+
+
+def _password_digest(password: str, salt_hex: str) -> str:
+    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), 310000).hex()
+
+
+def _issue_user_tokens(user: OAuthUser, scopes: set[str], db: Session) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    access_raw = "fs_oauth_at_" + secrets.token_urlsafe(40)
+    refresh_raw = "fs_oauth_rt_" + secrets.token_urlsafe(48)
+    access_seconds = max(60, min(int(os.getenv("OAUTH_ACCESS_TOKEN_SECONDS", "900")), 3600))
+    refresh_days = max(1, min(int(os.getenv("OAUTH_REFRESH_TOKEN_DAYS", "7")), 90))
+    scope_text = " ".join(sorted(scopes))
+    db.add(OAuthUserAccessToken(user_id=user.id, token_hash=hash_api_key(access_raw), scopes=scope_text, created_at=now, expires_at=now + timedelta(seconds=access_seconds)))
+    db.add(OAuthRefreshToken(user_id=user.id, token_hash=hash_api_key(refresh_raw), scopes=scope_text, created_at=now, expires_at=now + timedelta(days=refresh_days)))
+    db.commit()
+    return {"access_token": access_raw, "token_type": "Bearer", "expires_in": access_seconds, "refresh_token": refresh_raw, "refresh_expires_in": refresh_days * 86400, "scope": scope_text}
+
+
+@app.post("/admin/oauth-users", status_code=201, tags=["Admin", "OAuth 2.0"], dependencies=[Depends(require_admin_key)])
+def create_oauth_user(payload: dict[str, Any], db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Create username/password credentials linked to an approved client API key."""
+    username = str(payload.get("username") or "").strip()
+    password = str(payload.get("password") or "")
+    api_key_id = payload.get("api_key_id")
+    if not re.fullmatch(r"[A-Za-z0-9_.@-]{3,120}", username) or len(password) < 12 or len(password) > 256:
+        raise HTTPException(status_code=422, detail="Username must be 3-120 valid characters and password must be 12-256 characters")
+    if not isinstance(api_key_id, int):
+        raise HTTPException(status_code=422, detail="api_key_id must be an integer")
+    if db.scalar(select(OAuthUser).where(OAuthUser.username == username)):
+        raise HTTPException(status_code=409, detail="Username already exists")
+    client_key = db.get(ClientAPIKey, api_key_id)
+    now = datetime.now(timezone.utc)
+    if client_key is None or client_key.revoked_at is not None or (_utc(client_key.expires_at) and _utc(client_key.expires_at) <= now):
+        raise HTTPException(status_code=400, detail="An active, unexpired approved API key is required")
+    salt = secrets.token_bytes(16).hex()
+    user = OAuthUser(username=username, password_salt=salt, password_hash=_password_digest(password, salt), api_key_id=client_key.id, created_at=now)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {"user_id": user.id, "username": user.username, "api_key_id": user.api_key_id, "created_at": user.created_at.isoformat()}
+
+
+@app.post("/oauth/revoke", tags=["OAuth 2.0"])
+def revoke_oauth_refresh_token(payload: dict[str, str], db: Session = Depends(get_db)) -> dict[str, bool]:
+    raw = (payload.get("token") or payload.get("refresh_token") or "").strip()
+    if not raw:
+        raise HTTPException(status_code=422, detail="token is required")
+    row = db.scalar(select(OAuthRefreshToken).where(OAuthRefreshToken.token_hash == hash_api_key(raw)))
+    if row is None:
+        return {"revoked": True}
+    now = datetime.now(timezone.utc)
+    row.revoked_at = now
+    db.execute(update(OAuthUserAccessToken).where(OAuthUserAccessToken.user_id == row.user_id, OAuthUserAccessToken.revoked_at.is_(None)).values(revoked_at=now))
+    db.commit()
+    return {"revoked": True}
 
 
 @app.get("/auth/verify", tags=["Authentication"])

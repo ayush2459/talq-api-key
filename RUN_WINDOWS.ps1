@@ -23,4 +23,6 @@ if (-not $env:ADMIN_API_KEY -or $env:ADMIN_API_KEY -eq 'replace-with-a-long-rand
 }
 
 & '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt
-& '.\.venv\Scripts\python.exe' -m uvicorn app.integrated_main:app --host 127.0.0.1 --port 8000
+Write-Host 'Starting backend on all network interfaces (LAN access enabled) at port 8000.' -ForegroundColor Cyan
+Write-Host 'Use http://<THIS-PC-LAN-IP>:8000/docs from another device on the same trusted network.' -ForegroundColor Cyan
+& '.\.venv\Scripts\python.exe' -m uvicorn app.integrated_main:app --host 0.0.0.0 --port 8000

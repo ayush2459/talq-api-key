@@ -9,7 +9,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select
@@ -93,6 +93,7 @@ def hash_api_key(raw_key: str) -> str:
 
 
 def require_api_key(
+    request: Request,
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     db: Session = Depends(get_db),
 ) -> ClientAPIKey:
@@ -117,6 +118,22 @@ def require_api_key(
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at <= datetime.now(timezone.utc):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired")
+    # OAuth-managed partner keys carry explicit data scopes. Legacy manually
+    # issued pilot keys retain their existing behavior for backward compatibility.
+    granted_scopes = set(getattr(record, "scopes", "").split())
+    if granted_scopes:
+        path = request.url.path
+        required_any = None
+        if path.startswith("/devices") or path.startswith("/services") or path == "/integration-status":
+            required_any = {"devices:read"}
+        elif path.startswith("/measurements"):
+            required_any = {"energy:read", "water:read"}
+        elif path.startswith("/alerts") or path.startswith("/events"):
+            required_any = {"alerts:read"}
+        elif path.startswith("/data-packages"):
+            required_any = {"energy:read", "water:read", "alerts:read"}
+        if required_any and not (granted_scopes & required_any):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API key lacks the required data scope")
     return record
 
 

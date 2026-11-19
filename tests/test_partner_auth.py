@@ -135,3 +135,15 @@ def test_partner_cannot_request_unapproved_scope(client):
         json={"scopes": ["devices:read", "admin:all"]},
     )
     assert response.status_code == 422
+
+
+def test_partner_data_scope_is_enforced(client):
+    _, token = provision_and_token(client, scopes=["energy:read"])
+    bearer = {"Authorization": f"Bearer {token}"}
+    issued = client.post("/integrations/me/api-keys", headers=bearer)
+    assert issued.status_code == 200
+    response = client.get(
+        "/devices?clientAddress=partner-lan-01",
+        headers={"X-API-Key": issued.json()["api_key"], "talq-api-version": "2.7.1"},
+    )
+    assert response.status_code == 403

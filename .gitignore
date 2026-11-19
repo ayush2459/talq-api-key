@@ -7,3 +7,5 @@ __pycache__/
 !.env.example
 .DS_Store
 .partner-key.json
+
+flowsense_talq.db

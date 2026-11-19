@@ -80,6 +80,52 @@ def provision_and_token(client, scopes=None):
     return credentials, token_response.json()["access_token"]
 
 
+def test_admin_can_rotate_client_secret_and_revoke_old_tokens(client):
+    credentials, old_token = provision_and_token(client)
+    response = client.post(
+        "/admin/integrations/1/rotate-secret",
+        headers={"X-Admin-Key": "test-admin-secret"},
+    )
+    assert response.status_code == 200, response.text
+    rotated = response.json()
+    assert rotated["integration_id"] == 1
+    assert rotated["client_id"] == credentials["client_id"]
+    assert rotated["client_secret"]
+    assert rotated["revoked_access_tokens"] == 1
+
+    old_bearer = client.get(
+        "/integrations/me",
+        headers={"Authorization": f"Bearer {old_token}"},
+    )
+    assert old_bearer.status_code == 401
+
+    old_basic = base64.b64encode(
+        f"{credentials['client_id']}:{credentials['client_secret']}".encode()
+    ).decode()
+    old_auth = client.post(
+        "/oauth/token",
+        headers={
+            "Authorization": f"Basic {old_basic}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        content=urlencode({"grant_type": "client_credentials", "scope": "devices:read"}),
+    )
+    assert old_auth.status_code == 401
+
+    new_basic = base64.b64encode(
+        f"{rotated['client_id']}:{rotated['client_secret']}".encode()
+    ).decode()
+    new_auth = client.post(
+        "/oauth/token",
+        headers={
+            "Authorization": f"Basic {new_basic}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        content=urlencode({"grant_type": "client_credentials", "scope": "devices:read"}),
+    )
+    assert new_auth.status_code == 200, new_auth.text
+
+
 def test_partner_can_issue_verify_rotate_and_retire_key(client):
     _, token = provision_and_token(client)
     bearer = {"Authorization": f"Bearer {token}"}

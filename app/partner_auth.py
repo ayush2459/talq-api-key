@@ -367,3 +367,40 @@ def revoke_partner_api_key(
     return retire_partner_api_key(key_id, token, db)
 
 
+
+
+@router.post("/admin/integrations/{integration_id}/suspend", tags=["Admin"])
+def suspend_integration(
+    integration_id: int,
+    _: None = Depends(gateway.require_admin_key),
+    db: Session = Depends(gateway.get_db),
+) -> dict[str, Any]:
+    """Immediately disable a partner and revoke its outstanding credentials."""
+    client = db.get(IntegrationClient, integration_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    client.is_active = False
+    now = _now()
+    tokens = db.scalars(
+        select(OAuthAccessToken).where(
+            OAuthAccessToken.integration_client_id == client.id,
+            OAuthAccessToken.revoked_at.is_(None),
+        )
+    ).all()
+    keys = db.scalars(
+        select(IntegrationAPIKey).where(
+            IntegrationAPIKey.integration_client_id == client.id,
+            IntegrationAPIKey.revoked_at.is_(None),
+        )
+    ).all()
+    for token in tokens:
+        token.revoked_at = now
+    for key in keys:
+        key.revoked_at = now
+    db.commit()
+    return {
+        "integration_id": client.id,
+        "active": False,
+        "revoked_access_tokens": len(tokens),
+        "revoked_api_keys": len(keys),
+    }

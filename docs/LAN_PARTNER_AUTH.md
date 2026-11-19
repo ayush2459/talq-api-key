@@ -25,7 +25,7 @@ over the private LAN.
 
 | Method | Endpoint | Authentication |
 |---|---|---|
-| POST | `/admin/integrations/{request_id}/provision` | FlowSense admin key |
+| POST | `/admin/integrations/{request_id}/provision` | FlowSense admin key |\n| POST | `/admin/integrations/{integration_id}/suspend` | FlowSense admin key |
 | POST | `/oauth/token` | HTTP Basic client credentials |
 | GET | `/integrations/me` | OAuth Bearer token |
 | POST | `/integrations/me/api-keys` | Bearer token with `keys:manage` |
@@ -114,7 +114,7 @@ after the replacement passes verification.
   and explicitly retires the previous key.
 - API keys are tied to the approved partner client address and carry data scopes.
 - Each partner can list, rotate, retire, or revoke only its own keys.
-- The existing admin key is never given to a partner.
+- Admins can suspend an integration; outstanding OAuth tokens and partner API keys are revoked.\n- The existing admin key is never given to a partner.
 - Do not commit `.env`, `.partner-key.json`, or any real credentials.
 
 ## Important current limitations

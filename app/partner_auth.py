@@ -13,13 +13,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import DateTime, ForeignKey, String, Text, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
+from pydantic import BaseModel, Field
 
 from app import main as gateway
 
 router = APIRouter(tags=["Partner integrations"])
 basic_auth = HTTPBasic(auto_error=False)
 
-DEFAULT_SCOPES = {"keys:manage", "energy:read", "water:read", "devices:read", "alerts:read"}
+ALLOWED_DATA_SCOPES = {"energy:read", "water:read", "devices:read", "alerts:read"}
 ACCESS_TOKEN_TTL_SECONDS = 3600
 DEFAULT_API_KEY_TTL_DAYS = 30
 
@@ -30,6 +31,12 @@ def _now() -> datetime:
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+class ProvisionIntegrationInput(BaseModel):
+    # Least privilege: device-read access is the default. Admins may explicitly
+    # approve additional data categories when provisioning a partner.
+    scopes: list[str] = Field(default_factory=lambda: ["devices:read"])
 
 
 class IntegrationClient(gateway.Base):
@@ -124,6 +131,7 @@ def require_scope(required: str):
 @router.post("/admin/integrations/{request_id}/provision", tags=["Admin"])
 def provision_integration(
     request_id: int,
+    payload: ProvisionIntegrationInput = ProvisionIntegrationInput(),
     _: None = Depends(gateway.require_admin_key),
     db: Session = Depends(gateway.get_db),
 ) -> dict[str, Any]:
@@ -139,13 +147,17 @@ def provision_integration(
     if existing is not None:
         raise HTTPException(status_code=409, detail="An integration client already exists for this request")
 
+    requested_scopes = set(payload.scopes)
+    if not requested_scopes or not requested_scopes.issubset(ALLOWED_DATA_SCOPES):
+        raise HTTPException(status_code=422, detail={"allowed_scopes": sorted(ALLOWED_DATA_SCOPES)})
+
     client_id = "fs_client_" + secrets.token_urlsafe(18)
     client_secret = secrets.token_urlsafe(48)
     client = IntegrationClient(
         access_request_id=request_record.id,
         client_id=client_id,
         client_secret_hash=_hash(client_secret),
-        scopes=" ".join(sorted(DEFAULT_SCOPES)),
+        scopes=" ".join(sorted(requested_scopes | {"keys:manage"})),
         is_active=True,
     )
     db.add(client)
@@ -155,7 +167,7 @@ def provision_integration(
         "integration_id": client.id,
         "client_id": client.client_id,
         "client_secret": client_secret,
-        "scopes": sorted(DEFAULT_SCOPES),
+        "scopes": sorted(requested_scopes | {"keys:manage"}),
         "warning": "Save the client secret now. It is shown once and cannot be retrieved.",
     }
 

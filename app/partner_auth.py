@@ -135,6 +135,43 @@ def require_scope(required: str):
     return dependency
 
 
+@router.post("/admin/integrations/{integration_id}/rotate-secret", tags=["Admin"])
+def rotate_client_secret(
+    integration_id: int,
+    _: None = Depends(gateway.require_admin_key),
+    db: Session = Depends(gateway.get_db),
+) -> dict[str, Any]:
+    """Rotate a partner client secret; the new value is returned exactly once."""
+    client = db.get(IntegrationClient, integration_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    if not client.is_active:
+        raise HTTPException(status_code=409, detail="Cannot rotate credentials for an inactive integration")
+
+    new_secret = secrets.token_urlsafe(48)
+    client.client_secret_hash = _hash(new_secret)
+
+    # Revoke outstanding bearer tokens so the partner must authenticate again.
+    now = _now()
+    active_tokens = db.scalars(
+        select(OAuthAccessToken).where(
+            OAuthAccessToken.integration_client_id == client.id,
+            OAuthAccessToken.revoked_at.is_(None),
+        )
+    ).all()
+    for token in active_tokens:
+        token.revoked_at = now
+
+    db.commit()
+    return {
+        "integration_id": client.id,
+        "client_id": client.client_id,
+        "client_secret": new_secret,
+        "revoked_access_tokens": len(active_tokens),
+        "warning": "Save the new client secret now. It is shown once and cannot be retrieved.",
+    }
+
+
 @router.post("/admin/integrations/{request_id}/provision", tags=["Admin"])
 def provision_integration(
     request_id: int,

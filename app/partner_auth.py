@@ -11,7 +11,7 @@ from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlalchemy import DateTime, ForeignKey, String, Text, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from pydantic import BaseModel, Field
 
@@ -57,8 +57,12 @@ class OAuthAccessToken(gateway.Base):
     __tablename__ = "oauth_access_tokens"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    integration_client_id: Mapped[int] = mapped_column(
-        ForeignKey("integration_clients.id"), index=True
+    # Existing PostgreSQL installations have oauth_client_id pointing to the
+    # legacy oauth_clients table. Keep it nullable for backward compatibility;
+    # new partner tokens use integration_client_id.
+    oauth_client_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    integration_client_id: Mapped[int | None] = mapped_column(
+        ForeignKey("integration_clients.id"), nullable=True, index=True
     )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     scopes: Mapped[str] = mapped_column(Text)
@@ -114,7 +118,10 @@ def require_oauth_token(
         expires = expires.replace(tzinfo=timezone.utc)
     if expires <= _now():
         raise HTTPException(status_code=401, detail="Access token expired")
-    client = db.get(IntegrationClient, token.integration_client_id)
+    client = (
+        db.get(IntegrationClient, token.integration_client_id)
+        if token.integration_client_id is not None else None
+    )
     if client is None or not client.is_active:
         raise HTTPException(status_code=401, detail="Integration client is inactive")
     return token
@@ -219,7 +226,10 @@ async def issue_access_token(
 
 
 def _client_for_token(token: OAuthAccessToken, db: Session) -> tuple[IntegrationClient, gateway.AccessRequest]:
-    client = db.get(IntegrationClient, token.integration_client_id)
+    client = (
+        db.get(IntegrationClient, token.integration_client_id)
+        if token.integration_client_id is not None else None
+    )
     if client is None or not client.is_active:
         raise HTTPException(status_code=401, detail="Integration client is inactive")
     request_record = db.get(gateway.AccessRequest, client.access_request_id)

@@ -34,6 +34,18 @@ Only a SHA-256 hash of each issued API key is stored in the database. The raw ke
 
 See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for the partner-backend request examples and Python client sample.
 
+## Backend-only OAuth partner integration (LAN development)
+
+The `feature/lan-third-party-integration` branch adds OAuth 2.0 Client
+Credentials, one-time partner credential provisioning, partner-owned API-key
+generation/listing/rotation/revocation, expiry checks, and scope enforcement.
+No partner webpage is required.
+
+See [docs/LAN_PARTNER_AUTH.md](docs/LAN_PARTNER_AUTH.md) for LAN setup and
+the independent Python smoke test in `scripts/lan_partner_smoke_test.py`.
+The current gateway data routes remain pilot placeholders until live FlowSense
+meter/device data is connected.
+
 ### Protected gateway pilot routes (requires `X-API-Key`)
 - `GET /integration-status`
 - `GET /devices`

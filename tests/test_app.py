@@ -1,15 +1,24 @@
-import importlib
-from pathlib import Path
-
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 
 
 def make_client(monkeypatch, tmp_path):
-    monkeypatch.setenv("ADMIN_API_KEY", "test-admin-secret")
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
-    monkeypatch.setenv("TALQ_CLIENT_ADDRESS", "")
     import app.main as main
-    importlib.reload(main)
+
+    # Keep the original Base metadata shared with app.partner_auth. Reloading
+    # app.main here replaces Base and detaches the partner models from the
+    # metadata used by the partner-auth tests.
+    engine = create_engine(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+    main.engine = engine
+    main.SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    main.Base.metadata.create_all(bind=engine)
+
+    monkeypatch.setattr(main, "ADMIN_API_KEY", "test-admin-secret")
+    monkeypatch.setattr(main, "EXPECTED_CLIENT_ADDRESS", "")
     return TestClient(main.app), main
 
 
@@ -99,6 +108,7 @@ def test_revoked_key_stops_working(monkeypatch, tmp_path):
     assert client.get(
         "/integration-status", headers={"X-API-Key": approval["api_key"]}
     ).status_code == 401
+
 
 def test_auth_verify_returns_authenticated_client_metadata(monkeypatch, tmp_path):
     client, _ = make_client(monkeypatch, tmp_path)

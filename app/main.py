@@ -121,7 +121,7 @@ def require_api_key(
     # OAuth-managed partner keys carry explicit data scopes. Legacy manually
     # issued pilot keys retain their existing behavior for backward compatibility.
     granted_scopes = set(getattr(record, "scopes", "").split())
-    if granted_scopes:
+    if hasattr(record, "integration_client_id"):
         path = request.url.path
         required_any = None
         if path.startswith("/devices") or path.startswith("/services") or path == "/integration-status":

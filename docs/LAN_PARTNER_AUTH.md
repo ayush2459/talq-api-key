@@ -69,10 +69,17 @@ the existing admin endpoint. Provision the OAuth client after approval:
 ```http
 POST /admin/integrations/1/provision
 X-Admin-Key: <ADMIN_API_KEY>
+Content-Type: application/json
+
+{
+  "scopes": ["devices:read", "energy:read"]
+}
 ```
 
 Save the returned `client_id` and `client_secret` securely. The secret is
-not stored in plaintext and cannot be retrieved later.
+not stored in plaintext and cannot be retrieved later. The admin chooses the
+partner data scopes during provisioning; if omitted, only `devices:read` is
+approved by default. `keys:manage` is added for the partner key lifecycle.
 
 ## Run the independent partner test client
 

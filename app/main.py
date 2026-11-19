@@ -99,8 +99,24 @@ def require_api_key(
     if not x_api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key required")
     record = db.scalar(select(ClientAPIKey).where(ClientAPIKey.key_hash == hash_api_key(x_api_key)))
+    if record is None:
+        # Partner-managed keys are stored separately so the legacy key table
+        # and its existing rows do not require a destructive schema change.
+        integration_key_model = globals().get("IntegrationAPIKey")
+        if integration_key_model is not None:
+            record = db.scalar(
+                select(integration_key_model).where(
+                    integration_key_model.key_hash == hash_api_key(x_api_key)
+                )
+            )
     if record is None or record.revoked_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
+    expires_at = getattr(record, "expires_at", None)
+    if expires_at is not None:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired")
     return record
 
 
@@ -334,3 +350,9 @@ def get_service(serviceName: str, client_address: str = Depends(require_talq_hea
 @app.get("/data-packages", dependencies=[Depends(require_api_key)])
 def list_data_packages(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
     return {"dataPackages": DEMO_DATA_PACKAGES, "clientAddress": client_address}
+
+
+# Register the backend-only OAuth and partner key lifecycle routes after the
+# existing gateway models and dependencies have been defined.
+from app.partner_auth import router as partner_auth_router  # noqa: E402
+app.include_router(partner_auth_router)

@@ -6,10 +6,10 @@ import hashlib
 import os
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select
@@ -60,6 +60,13 @@ class ClientAPIKey(Base):
     key_prefix: Mapped[str] = mapped_column(String(20))
     key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    # Existing PostgreSQL pilot schema requires expires_at for every legacy key.
+    # Keep the ORM model aligned and give newly approved legacy keys a 30-day TTL.
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc) + timedelta(days=30),
+    )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -93,14 +100,47 @@ def hash_api_key(raw_key: str) -> str:
 
 
 def require_api_key(
+    request: Request,
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     db: Session = Depends(get_db),
 ) -> ClientAPIKey:
     if not x_api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key required")
     record = db.scalar(select(ClientAPIKey).where(ClientAPIKey.key_hash == hash_api_key(x_api_key)))
+    if record is None:
+        # Partner-managed keys are stored separately so the legacy key table
+        # and its existing rows do not require a destructive schema change.
+        integration_key_model = globals().get("IntegrationAPIKey")
+        if integration_key_model is not None:
+            record = db.scalar(
+                select(integration_key_model).where(
+                    integration_key_model.key_hash == hash_api_key(x_api_key)
+                )
+            )
     if record is None or record.revoked_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
+    expires_at = getattr(record, "expires_at", None)
+    if expires_at is not None:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired")
+    # OAuth-managed partner keys carry explicit data scopes. Legacy manually
+    # issued pilot keys retain their existing behavior for backward compatibility.
+    granted_scopes = set(getattr(record, "scopes", "").split())
+    if hasattr(record, "integration_client_id"):
+        path = request.url.path
+        required_any = None
+        if path.startswith("/devices") or path.startswith("/services") or path == "/integration-status":
+            required_any = {"devices:read"}
+        elif path.startswith("/measurements"):
+            required_any = {"energy:read", "water:read"}
+        elif path.startswith("/alerts") or path.startswith("/events"):
+            required_any = {"alerts:read"}
+        elif path.startswith("/data-packages"):
+            required_any = {"energy:read", "water:read", "alerts:read"}
+        if required_any and not (granted_scopes & required_any):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API key lacks the required data scope")
     return record
 
 
@@ -334,3 +374,9 @@ def get_service(serviceName: str, client_address: str = Depends(require_talq_hea
 @app.get("/data-packages", dependencies=[Depends(require_api_key)])
 def list_data_packages(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
     return {"dataPackages": DEMO_DATA_PACKAGES, "clientAddress": client_address}
+
+
+# Register the backend-only OAuth and partner key lifecycle routes after the
+# existing gateway models and dependencies have been defined.
+from app.partner_auth import router as partner_auth_router  # noqa: E402
+app.include_router(partner_auth_router)

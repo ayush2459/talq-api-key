@@ -73,6 +73,7 @@ class IntegrationAPIKey(gateway.Base):
     client_address: Mapped[str] = mapped_column(String(160), index=True)
     key_prefix: Mapped[str] = mapped_column(String(20))
     key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    scopes: Mapped[str] = mapped_column(Text, default="devices:read")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -247,6 +248,7 @@ def create_partner_api_key(
         client_address=request_record.client_address,
         key_prefix=raw_key[:15],
         key_hash=_hash(raw_key),
+        scopes=" ".join(sorted(set(token.scopes.split()) - {"keys:manage"})),
         expires_at=expires_at,
     )
     db.add(record)
@@ -256,6 +258,7 @@ def create_partner_api_key(
         "key_id": record.id,
         "api_key": raw_key,
         "status": "active",
+        "scopes": record.scopes.split(),
         "expires_at": expires_at.isoformat(),
         "warning": "Save this API key now. It is returned once and cannot be retrieved.",
     }
@@ -310,6 +313,7 @@ def rotate_partner_api_key(
         client_address=request_record.client_address,
         key_prefix=raw_key[:15],
         key_hash=_hash(raw_key),
+        scopes=" ".join(sorted(set(token.scopes.split()) - {"keys:manage"})),
         expires_at=expires_at,
     )
     db.add(replacement)
@@ -319,6 +323,7 @@ def rotate_partner_api_key(
         "key_id": replacement.id,
         "api_key": raw_key,
         "expires_at": expires_at.isoformat(),
+        "scopes": replacement.scopes.split(),
         "previous_key_id": old.id,
         "previous_key_remains_active": True,
         "next_step": f"Test the new key, then POST /integrations/me/api-keys/{old.id}/retire",

@@ -65,13 +65,16 @@ def provision_and_token(client, scopes=None):
     basic = base64.b64encode(
         f"{credentials['client_id']}:{credentials['client_secret']}".encode()
     ).decode()
+    # Ask for exactly the data scopes approved during provisioning, plus the
+    # internal key-management scope required to issue/rotate the TALQ key.
+    requested_scopes = " ".join(["keys:manage", *approved_scopes])
     token_response = client.post(
         "/oauth/token",
         headers={
             "Authorization": f"Basic {basic}",
             "Content-Type": "application/x-www-form-urlencoded",
         },
-        content=urlencode({"grant_type": "client_credentials", "scope": "keys:manage devices:read"}),
+        content=urlencode({"grant_type": "client_credentials", "scope": requested_scopes}),
     )
     assert token_response.status_code == 200, token_response.text
     return credentials, token_response.json()["access_token"]

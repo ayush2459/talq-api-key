@@ -54,10 +54,11 @@ def client():
 
 
 def provision_and_token(client, scopes=None):
+    approved_scopes = scopes or ["devices:read"]
     provision = client.post(
         f"/admin/integrations/{client.request_id}/provision",
         headers={"X-Admin-Key": "test-admin-secret"},
-        json={"scopes": scopes or ["devices:read"]},
+        json={"scopes": approved_scopes},
     )
     assert provision.status_code == 200, provision.text
     credentials = provision.json()

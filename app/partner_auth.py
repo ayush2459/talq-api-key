@@ -350,7 +350,3 @@ def revoke_partner_api_key(
     return retire_partner_api_key(key_id, token, db)
 
 
-@router.include_in_schema
-def _unused_marker():
-    # This function is never exposed as a route; it only keeps module structure explicit.
-    return None

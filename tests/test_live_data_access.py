@@ -60,10 +60,40 @@ def test_facility_lookup_returns_only_active_unrevoked_grants():
                     revoked_at=None,
                 ),
             ])
+            second_request = main.AccessRequest(
+                contact_name="Second Partner",
+                email="second@example.test",
+                organization="Second Partner Co",
+                purpose="Verify that facility grants are isolated by integration.",
+                client_address="second-partner-01",
+                status="approved",
+            )
+            db.add(second_request)
+            db.commit()
+            db.refresh(second_request)
+            second_client = IntegrationClient(
+                access_request_id=second_request.id,
+                client_id="fs_client_second_partner",
+                client_secret_hash="b" * 64,
+                scopes="keys:manage energy:read",
+                is_active=True,
+            )
+            db.add(second_client)
+            db.commit()
+            db.refresh(second_client)
+            db.add(IntegrationFacilityAccess(
+                integration_client_id=second_client.id,
+                facility_id="facility-second-partner",
+                facility_code="FS-SECOND",
+                is_active=True,
+                revoked_at=None,
+            ))
             db.commit()
 
             api_key = SimpleNamespace(integration_client_id=client.id)
+            second_key = SimpleNamespace(integration_client_id=second_client.id)
             assert main.get_authorized_facility_ids(api_key, db) == ["facility-active"]
+            assert main.get_authorized_facility_ids(second_key, db) == ["facility-second-partner"]
     finally:
         engine.dispose()
 

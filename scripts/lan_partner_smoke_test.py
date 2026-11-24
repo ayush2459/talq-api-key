@@ -128,7 +128,7 @@ def main() -> None:
         })
 
     print("[DONE] Partner OAuth and API-key lifecycle smoke test passed.")
-    print(f"Verified routes for approved scopes: {", ".join(TEST_SCOPES)}")
+    print("Verified routes for approved scopes: " + ", ".join(TEST_SCOPES))
     print("A successful HTTP response confirms API behavior; compare returned records with authorized live RDS data during acceptance testing.")
 
 

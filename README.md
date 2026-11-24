@@ -178,4 +178,3 @@ An administrator then lists pending requests and approves the returned request I
 - Repository: https://github.com/ayush2459/talq-api-key
 - TALQ Consortium specification: https://github.com/TALQ-consortium/TALQ_specification
 - FastAPI: https://fastapi.tiangolo.com/
-- Render: https://render.com/docs

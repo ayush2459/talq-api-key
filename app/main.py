@@ -378,9 +378,6 @@ def fetch_authorized_devices(
     if not facility_ids:
         return []
 
-    # Import locally; RDS remains separate from the Neon authorization DB.
-    from app.rds_database import rds_engine
-
     device_filter = ""
     params: dict[str, Any] = {"facility_ids": facility_ids}
 
@@ -440,6 +437,11 @@ def fetch_authorized_devices(
         raise HTTPException(
             status_code=503,
             detail="Unable to retrieve authorized FlowSense devices",
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="FlowSense RDS is not configured or unavailable",
         ) from exc
 
 

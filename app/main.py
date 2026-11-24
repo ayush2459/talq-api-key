@@ -411,6 +411,7 @@ def fetch_authorized_devices(
     )
 
     try:
+        from app.rds_database import rds_engine
         with rds_engine.connect() as connection:
             rows = connection.execute(query, params).mappings().all()
 
@@ -485,7 +486,6 @@ def fetch_authorized_measurements(
     """Read meter and sensor measurements using facility-filtered, bounded SQL."""
     if not facility_ids or not resource_types:
         return []
-    from app.rds_database import rds_engine
     query = text("""
         SELECT *
         FROM (
@@ -583,7 +583,6 @@ def fetch_authorized_alerts(
     """Read FlowSense alerts only for facilities granted to this partner."""
     if not facility_ids:
         return []
-    from app.rds_database import rds_engine
     query = text("""
         SELECT a.alert_id::text AS alert_id, a.anomaly_id::text AS anomaly_id,
                a.facility_id::text AS facility_id, f.facility_code AS facility_code,
@@ -597,6 +596,7 @@ def fetch_authorized_alerts(
         LIMIT :limit OFFSET :offset
     """).bindparams(bindparam("facility_ids", expanding=True))
     try:
+        from app.rds_database import rds_engine
         with rds_engine.connect() as connection:
             rows = connection.execute(query, {
                 "facility_ids": facility_ids, "start_time": start_time,

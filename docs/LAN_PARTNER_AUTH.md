@@ -54,16 +54,19 @@ For a LAN server with a private PostgreSQL connection, set `DATABASE_URL`
 to that server-side connection string. Do not expose database credentials
 to partner machines.
 
-Start the app on the LAN interface:
+Start the app bound to the gateway server's private LAN address. Replace the
+example with the actual IPv4 address assigned to the server's LAN interface:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+$env:FLOWSENSE_LAN_HOST = "192.168.1.10"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host $env:FLOWSENSE_LAN_HOST --port 8000
 ```
 
-Use the server's private LAN address from partner machines, for example
-`http://192.168.1.10:8000`. The IP and port are examples; use the actual
-LAN configuration. Restrict inbound access with the host firewall. For
-sensitive or production use, terminate TLS on the private network as well.
+Do not use `0.0.0.0`: it listens on every network interface, not only the LAN.
+Partner machines use `http://192.168.1.10:8000` with the actual server address.
+Restrict inbound TCP port 8000 to approved partner systems using the host
+firewall or VPN. For sensitive or production use, terminate TLS on the private
+network as well. Do not deploy this gateway to a public hosting platform.
 
 ## Provision a partner
 

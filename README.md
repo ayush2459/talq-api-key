@@ -105,17 +105,29 @@ Open [Swagger UI](http://127.0.0.1:8000/docs) or the [health endpoint](http://12
 .\\.venv\\Scripts\\python.exe -m pytest -q
 ```
 
-## Deploying on Render
+## LAN server deployment
 
-The repository includes a Dockerfile and Render Blueprint. For approval and API-key records to survive restarts and deployments, configure a **persistent PostgreSQL database**:
+This project is intended to run on the FlowSense private LAN server. Do not
+deploy the gateway to a public hosting platform. Configure the server's private
+IPv4 address and restrict inbound TCP port 8000 to approved partner systems
+using the host firewall or VPN.
 
-1. Create a PostgreSQL database in Render (or use an existing managed PostgreSQL database).
-2. Copy its private/internal connection URL into the web service's `DATABASE_URL` environment variable when the database and web service are in the same Render region.
-3. Deploy the Blueprint and confirm `ADMIN_API_KEY` has a strong generated value. Keep it private.
-4. Keep `DEMO_MODE=true` until real FlowSense integration is complete.
-5. Test the health endpoint and submit a sample access request.
+Set the required server-side environment values in the untracked `.env` file:
+`ADMIN_API_KEY`, `DATABASE_URL`, `FLOW_SENSE_DATABASE_URL`, `AWS_REGION`,
+and the appropriate AWS IAM profile/role configuration. Never copy the RDS
+connection string, AWS credentials, or admin secret to partner machines.
 
-Do not rely on the default SQLite file for a cloud deployment: local files on ephemeral hosting may be lost during redeploys or restarts. Never commit database credentials or admin secrets to GitHub.
+Start the service bound to the server's private LAN address (replace the
+example with the actual address assigned to the gateway host):
+
+```powershell
+$env:FLOWSENSE_LAN_HOST = "192.168.1.10"
+.\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host $env:FLOWSENSE_LAN_HOST --port 8000
+```
+
+Do not use `0.0.0.0` for a LAN-only deployment because it listens on every
+available interface. Confirm the firewall allows only the intended partner
+subnet and does not expose port 8000 to the public internet.
 
 ## Example access workflow
 

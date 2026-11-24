@@ -562,6 +562,7 @@ def fetch_authorized_measurements(
         "limit": limit, "offset": offset,
     }
     try:
+        from app.rds_database import rds_engine
         with rds_engine.connect() as connection:
             rows = connection.execute(query, params).mappings().all()
         return [{

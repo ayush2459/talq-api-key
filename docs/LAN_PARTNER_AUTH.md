@@ -95,7 +95,14 @@ $env:FLOWSENSE_BASE_URL = "http://192.168.1.10:8000"
 $env:FLOWSENSE_CLIENT_ID = "<client_id>"
 $env:FLOWSENSE_CLIENT_SECRET = "<client_secret>"
 $env:FLOWSENSE_CLIENT_ADDRESS = "<approved-client-address>"
+# Include only scopes that were approved for this partner:
+$env:FLOWSENSE_TEST_SCOPES = "devices:read energy:read water:read alerts:read"
 ```
+
+The smoke test always checks authentication and devices. It additionally checks
+measurements for energy/water scopes, alerts/events for `alerts:read`, and
+data packages when any data scope is approved. The requested test scopes must
+be a subset of the scopes provisioned for that OAuth client.
 
 Run:
 

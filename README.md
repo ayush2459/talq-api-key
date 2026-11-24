@@ -34,6 +34,19 @@ Only a SHA-256 hash of each issued API key is stored in the database. The raw ke
 
 See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for the partner-backend request examples and Python client sample.
 
+## Backend-only OAuth partner integration (LAN development)
+
+The `feature/lan-third-party-integration` branch adds OAuth 2.0 Client
+Credentials, one-time partner credential provisioning, partner-owned API-key
+generation/listing/rotation/revocation, expiry checks, and scope enforcement.
+No partner webpage is required.
+
+See [docs/LAN_PARTNER_AUTH.md](docs/LAN_PARTNER_AUTH.md) for LAN setup and
+the independent Python smoke test in `scripts/lan_partner_smoke_test.py`.
+The branch now includes facility-scoped RDS queries for devices, meter/sensor
+measurements, alerts, events, and data packages. Live AWS connectivity and
+partner-LAN interoperability still require deployment-side verification.
+
 ### Protected gateway pilot routes (requires `X-API-Key`)
 - `GET /integration-status`
 - `GET /devices`
@@ -41,7 +54,10 @@ See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for the partner-backend reque
 - `GET /devices/{deviceAddress}`
 - `GET /services`
 - `GET /services/{serviceName}`
-- `GET /data-packages`
+- `GET /measurements` — bounded, paginated energy/water meter and sensor readings (requires `energy:read` and/or `water:read`).
+- `GET /alerts` — facility-scoped FlowSense alerts (requires `alerts:read`).
+- `GET /events` — alert lifecycle records exposed as gateway events (requires `alerts:read`).
+- `GET /data-packages` — packages assembled from the partner's authorized measurement and alert scopes.
 
 Gateway routes also require the `talq-api-version: 2.7.1` header and `clientAddress` query parameter. The requested client address must match the one associated with the issued key. These are pilot routes and response payloads, not proof of complete TALQ 2.7.1 conformance.
 
@@ -89,17 +105,29 @@ Open [Swagger UI](http://127.0.0.1:8000/docs) or the [health endpoint](http://12
 .\\.venv\\Scripts\\python.exe -m pytest -q
 ```
 
-## Deploying on Render
+## LAN server deployment
 
-The repository includes a Dockerfile and Render Blueprint. For approval and API-key records to survive restarts and deployments, configure a **persistent PostgreSQL database**:
+This project is intended to run on the FlowSense private LAN server. Do not
+deploy the gateway to a public hosting platform. Configure the server's private
+IPv4 address and restrict inbound TCP port 8000 to approved partner systems
+using the host firewall or VPN.
 
-1. Create a PostgreSQL database in Render (or use an existing managed PostgreSQL database).
-2. Copy its private/internal connection URL into the web service's `DATABASE_URL` environment variable when the database and web service are in the same Render region.
-3. Deploy the Blueprint and confirm `ADMIN_API_KEY` has a strong generated value. Keep it private.
-4. Keep `DEMO_MODE=true` until real FlowSense integration is complete.
-5. Test the health endpoint and submit a sample access request.
+Set the required server-side environment values in the untracked `.env` file:
+`ADMIN_API_KEY`, `DATABASE_URL`, `FLOW_SENSE_DATABASE_URL`, `AWS_REGION`,
+and the appropriate AWS IAM profile/role configuration. Never copy the RDS
+connection string, AWS credentials, or admin secret to partner machines.
 
-Do not rely on the default SQLite file for a cloud deployment: local files on ephemeral hosting may be lost during redeploys or restarts. Never commit database credentials or admin secrets to GitHub.
+Start the service bound to the server's private LAN address (replace the
+example with the actual address assigned to the gateway host):
+
+```powershell
+$env:FLOWSENSE_LAN_HOST = "192.168.1.10"
+.\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host $env:FLOWSENSE_LAN_HOST --port 8000
+```
+
+Do not use `0.0.0.0` for a LAN-only deployment because it listens on every
+available interface. Confirm the firewall allows only the intended partner
+subnet and does not expose port 8000 to the public internet.
 
 ## Example access workflow
 
@@ -129,8 +157,8 @@ An administrator then lists pending requests and approves the returned request I
 
 ## Current limitations
 
-- No live MQTT, sensor, meter, or production database integration with FlowSense business data.
-- Device and data-package lists are empty placeholders.
+- This gateway reads existing FlowSense RDS records; it does not ingest MQTT telemetry or replace the FlowSense sensor-ingestion pipeline.
+- Live RDS-backed device, measurement, alert, event, and data-package routes are implemented on the development branch; actual RDS connectivity and returned payloads still require environment-level verification.
 - Only a limited set of gateway-style routes is present.
 - No complete TALQ schema validation or external CMS interoperability test has been demonstrated.
 - The service is not TALQ-certified.
@@ -150,4 +178,3 @@ An administrator then lists pending requests and approves the returned request I
 - Repository: https://github.com/ayush2459/talq-api-key
 - TALQ Consortium specification: https://github.com/TALQ-consortium/TALQ_specification
 - FastAPI: https://fastapi.tiangolo.com/
-- Render: https://render.com/docs

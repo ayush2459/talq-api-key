@@ -442,6 +442,280 @@ def fetch_authorized_devices(
         ) from exc
 
 
+def _normalize_time_window(
+    start: datetime | None,
+    end: datetime | None,
+) -> tuple[datetime, datetime]:
+    """Default to seven days and reject unbounded or reversed data windows."""
+    now = datetime.now(timezone.utc)
+    end_time = end or now
+    start_time = start or (end_time - timedelta(days=7))
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+    if start_time >= end_time:
+        raise HTTPException(status_code=422, detail="start must be earlier than end")
+    if end_time > now + timedelta(minutes=5):
+        raise HTTPException(status_code=422, detail="end cannot be in the future")
+    if end_time - start_time > timedelta(days=90):
+        raise HTTPException(status_code=422, detail="Time windows cannot exceed 90 days")
+    return start_time, end_time
+
+
+def _partner_measurement_scopes(api_key: Any, requested: str | None = None) -> list[str]:
+    """Return only measurement resource types explicitly granted to this key."""
+    if getattr(api_key, "integration_client_id", None) is None:
+        return []
+    scopes = set(getattr(api_key, "scopes", "").split())
+    allowed = []
+    if "energy:read" in scopes:
+        allowed.append("energy")
+    if "water:read" in scopes:
+        allowed.append("water")
+    if requested is not None and requested not in allowed:
+        raise HTTPException(status_code=403, detail=f"API key is not authorized for {requested} measurements")
+    return [requested] if requested else allowed
+
+
+def fetch_authorized_measurements(
+    facility_ids: list[str], start_time: datetime, end_time: datetime,
+    resource_types: list[str], limit: int = 100, offset: int = 0,
+) -> list[dict[str, Any]]:
+    """Read meter and sensor measurements using facility-filtered, bounded SQL."""
+    if not facility_ids or not resource_types:
+        return []
+    from app.rds_database import rds_engine
+    query = text("""
+        SELECT *
+        FROM (
+            SELECT
+                'meter' AS source_type,
+                mr.reading_id::text AS reading_id,
+                mr.reading_time AS reading_time,
+                mr.reading_value::double precision AS value,
+                m.unit AS unit,
+                CASE
+                    WHEN lower(m.resource_type) LIKE '%water%' THEN 'water'
+                    WHEN lower(m.resource_type) LIKE '%energy%' OR lower(m.resource_type) LIKE '%electric%' THEN 'energy'
+                    ELSE lower(m.resource_type)
+                END AS resource_type,
+                m.meter_code AS source_code,
+                m.meter_name AS source_name,
+                f.facility_code AS facility_code,
+                mr.quality_status AS quality_status
+            FROM meter_readings mr
+            INNER JOIN meters m ON m.meter_id = mr.meter_id
+            INNER JOIN facilities f ON f.facility_id = m.facility_id
+            WHERE m.facility_id::text IN :meter_facility_ids
+              AND mr.reading_time >= :start_time AND mr.reading_time < :end_time
+              AND (
+                    (lower(m.resource_type) LIKE '%water%' AND 'water' IN :resource_types)
+                 OR ((lower(m.resource_type) LIKE '%energy%' OR lower(m.resource_type) LIKE '%electric%')
+                     AND 'energy' IN :resource_types)
+              )
+            UNION ALL
+            SELECT
+                'sensor' AS source_type,
+                sr.reading_id::text AS reading_id,
+                sr.reading_time AS reading_time,
+                sr.numeric_value::double precision AS value,
+                s.unit AS unit,
+                CASE
+                    WHEN lower(coalesce(m.resource_type, s.measurement, s.sensor_type)) LIKE '%water%' THEN 'water'
+                    WHEN lower(coalesce(m.resource_type, s.measurement, s.sensor_type)) LIKE '%energy%'
+                      OR lower(coalesce(m.resource_type, s.measurement, s.sensor_type)) LIKE '%electric%' THEN 'energy'
+                    ELSE lower(coalesce(m.resource_type, s.measurement, s.sensor_type))
+                END AS resource_type,
+                s.sensor_code AS source_code,
+                s.sensor_name AS source_name,
+                f.facility_code AS facility_code,
+                sr.quality_status AS quality_status
+            FROM sensor_readings sr
+            INNER JOIN iot_sensors s ON s.sensor_id = sr.sensor_id
+            INNER JOIN iot_devices d ON d.iot_device_id = s.iot_device_id
+            INNER JOIN facilities f ON f.facility_id = d.facility_id
+            LEFT JOIN meters m ON m.meter_id = s.source_meter_id
+            WHERE d.facility_id::text IN :sensor_facility_ids
+              AND sr.reading_time >= :start_time AND sr.reading_time < :end_time
+              AND sr.numeric_value IS NOT NULL
+              AND (
+                    (lower(coalesce(m.resource_type, s.measurement, s.sensor_type)) LIKE '%water%'
+                     AND 'water' IN :resource_types)
+                 OR ((lower(coalesce(m.resource_type, s.measurement, s.sensor_type)) LIKE '%energy%'
+                      OR lower(coalesce(m.resource_type, s.measurement, s.sensor_type)) LIKE '%electric%')
+                     AND 'energy' IN :resource_types)
+              )
+        ) AS authorized_measurements
+        ORDER BY reading_time DESC, reading_id DESC
+        LIMIT :limit OFFSET :offset
+    """).bindparams(
+        bindparam("meter_facility_ids", expanding=True),
+        bindparam("sensor_facility_ids", expanding=True),
+        bindparam("resource_types", expanding=True),
+    )
+    params = {
+        "meter_facility_ids": facility_ids, "sensor_facility_ids": facility_ids,
+        "resource_types": resource_types, "start_time": start_time, "end_time": end_time,
+        "limit": limit, "offset": offset,
+    }
+    try:
+        with rds_engine.connect() as connection:
+            rows = connection.execute(query, params).mappings().all()
+        return [{
+            "readingId": row["reading_id"],
+            "sourceType": row["source_type"],
+            "timestamp": row["reading_time"].isoformat() if row["reading_time"] else None,
+            "value": row["value"], "unit": row["unit"], "resourceType": row["resource_type"],
+            "sourceCode": row["source_code"], "sourceName": row["source_name"],
+            "facilityCode": row["facility_code"], "qualityStatus": row["quality_status"],
+        } for row in rows]
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="Unable to retrieve authorized FlowSense measurements") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="FlowSense RDS is not configured or unavailable") from exc
+
+
+def fetch_authorized_alerts(
+    facility_ids: list[str], start_time: datetime, end_time: datetime,
+    limit: int = 100, offset: int = 0,
+) -> list[dict[str, Any]]:
+    """Read FlowSense alerts only for facilities granted to this partner."""
+    if not facility_ids:
+        return []
+    from app.rds_database import rds_engine
+    query = text("""
+        SELECT a.alert_id::text AS alert_id, a.anomaly_id::text AS anomaly_id,
+               a.facility_id::text AS facility_id, f.facility_code AS facility_code,
+               a.alert_title AS alert_title, a.alert_message AS alert_message,
+               a.severity AS severity, a.triggered_at AS triggered_at, a.status AS status
+        FROM alerts a
+        INNER JOIN facilities f ON f.facility_id = a.facility_id
+        WHERE a.facility_id::text IN :facility_ids
+          AND a.triggered_at >= :start_time AND a.triggered_at < :end_time
+        ORDER BY a.triggered_at DESC, a.alert_id DESC
+        LIMIT :limit OFFSET :offset
+    """).bindparams(bindparam("facility_ids", expanding=True))
+    try:
+        with rds_engine.connect() as connection:
+            rows = connection.execute(query, {
+                "facility_ids": facility_ids, "start_time": start_time,
+                "end_time": end_time, "limit": limit, "offset": offset,
+            }).mappings().all()
+        return [{
+            "alertId": row["alert_id"], "anomalyId": row["anomaly_id"],
+            "facilityId": row["facility_id"], "facilityCode": row["facility_code"],
+            "title": row["alert_title"], "message": row["alert_message"],
+            "severity": row["severity"],
+            "triggeredAt": row["triggered_at"].isoformat() if row["triggered_at"] else None,
+            "status": row["status"],
+        } for row in rows]
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="Unable to retrieve authorized FlowSense alerts") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="FlowSense RDS is not configured or unavailable") from exc
+
+
+@app.get("/measurements", tags=["Measurements"])
+def list_measurements(
+    client_address: str = Depends(require_talq_headers),
+    api_key: Any = Depends(require_api_key), db: Session = Depends(get_db),
+    start: datetime | None = Query(default=None), end: datetime | None = Query(default=None),
+    resource_type: str | None = Query(default=None, pattern="^(energy|water)$"),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=100000),
+) -> dict[str, Any]:
+    start_time, end_time = _normalize_time_window(start, end)
+    resource_types = _partner_measurement_scopes(api_key, resource_type)
+    facility_ids = get_authorized_facility_ids(api_key, db)
+    rows = fetch_authorized_measurements(facility_ids, start_time, end_time, resource_types, limit + 1, offset)
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return {
+        "measurements": rows, "count": len(rows), "limit": limit, "offset": offset,
+        "hasMore": has_more, "start": start_time.isoformat(), "end": end_time.isoformat(),
+        "clientAddress": client_address,
+    }
+
+
+@app.get("/alerts", tags=["Alerts"])
+def list_alerts(
+    client_address: str = Depends(require_talq_headers),
+    api_key: Any = Depends(require_api_key), db: Session = Depends(get_db),
+    start: datetime | None = Query(default=None), end: datetime | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=100000),
+) -> dict[str, Any]:
+    start_time, end_time = _normalize_time_window(start, end)
+    facility_ids = get_authorized_facility_ids(api_key, db)
+    rows = fetch_authorized_alerts(facility_ids, start_time, end_time, limit + 1, offset)
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return {
+        "alerts": rows, "count": len(rows), "limit": limit, "offset": offset,
+        "hasMore": has_more, "start": start_time.isoformat(), "end": end_time.isoformat(),
+        "clientAddress": client_address,
+    }
+
+
+@app.get("/events", tags=["Events"])
+def list_events(
+    client_address: str = Depends(require_talq_headers),
+    api_key: Any = Depends(require_api_key), db: Session = Depends(get_db),
+    start: datetime | None = Query(default=None), end: datetime | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=100000),
+) -> dict[str, Any]:
+    """Expose FlowSense alert lifecycle records as gateway events."""
+    start_time, end_time = _normalize_time_window(start, end)
+    facility_ids = get_authorized_facility_ids(api_key, db)
+    rows = fetch_authorized_alerts(facility_ids, start_time, end_time, limit + 1, offset)
+    has_more = len(rows) > limit
+    events = [{
+        "eventId": row["alertId"], "eventType": "alert", "eventTime": row["triggeredAt"],
+        "facilityCode": row["facilityCode"], "severity": row["severity"],
+        "status": row["status"], "title": row["title"], "message": row["message"],
+        "anomalyId": row["anomalyId"],
+    } for row in rows[:limit]]
+    return {
+        "events": events, "count": len(events), "limit": limit, "offset": offset,
+        "hasMore": has_more, "start": start_time.isoformat(), "end": end_time.isoformat(),
+        "clientAddress": client_address,
+    }
+
+
+@app.get("/data-packages", tags=["Data packages"])
+def list_data_packages(
+    client_address: str = Depends(require_talq_headers),
+    api_key: Any = Depends(require_api_key), db: Session = Depends(get_db),
+    start: datetime | None = Query(default=None), end: datetime | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    """Build data packages from live records within the partner's granted facilities."""
+    start_time, end_time = _normalize_time_window(start, end)
+    facility_ids = get_authorized_facility_ids(api_key, db)
+    scopes = set(getattr(api_key, "scopes", "").split())
+    packages: list[dict[str, Any]] = []
+    resource_types = _partner_measurement_scopes(api_key)
+    if resource_types:
+        measurements = fetch_authorized_measurements(facility_ids, start_time, end_time, resource_types, limit, 0)
+        packages.append({
+            "packageId": "flow-measurements", "packageType": "measurements",
+            "resourceTypes": resource_types, "count": len(measurements), "records": measurements,
+        })
+    if "alerts:read" in scopes:
+        alerts = fetch_authorized_alerts(facility_ids, start_time, end_time, limit, 0)
+        packages.append({
+            "packageId": "flow-alert-events", "packageType": "alerts-and-events",
+            "count": len(alerts), "records": alerts,
+        })
+    return {
+        "dataPackages": packages, "count": len(packages),
+        "start": start_time.isoformat(), "end": end_time.isoformat(),
+        "clientAddress": client_address,
+    }
+
+
 @app.get("/devices")
 def list_devices(
     client_address: str = Depends(require_talq_headers),
@@ -510,9 +784,6 @@ def get_service(serviceName: str, client_address: str = Depends(require_talq_hea
     return {"serviceName": serviceName, "available": True, "clientAddress": client_address}
 
 
-@app.get("/data-packages", dependencies=[Depends(require_api_key)])
-def list_data_packages(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
-    return {"dataPackages": DEMO_DATA_PACKAGES, "clientAddress": client_address}
 
 
 # Register the backend-only OAuth and partner key lifecycle routes after the

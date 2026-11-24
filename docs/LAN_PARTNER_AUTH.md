@@ -33,6 +33,10 @@ over the private LAN.
 | POST | `/integrations/me/api-keys/{key_id}/rotate` | Bearer token with `keys:manage` |
 | POST | `/integrations/me/api-keys/{key_id}/retire` | Bearer token with `keys:manage` |
 | POST | `/integrations/me/api-keys/{key_id}/revoke` | Bearer token with `keys:manage` |
+| GET | `/measurements` | TALQ API key; `energy:read` and/or `water:read` |
+| GET | `/alerts` | TALQ API key; `alerts:read` |
+| GET | `/events` | TALQ API key; `alerts:read` |
+| GET | `/data-packages` | TALQ API key; only granted measurement/alert scopes are included |
 
 ## LAN setup (Windows PowerShell)
 
@@ -123,11 +127,12 @@ after the replacement passes verification.
   database before use with the existing RDS database.
 - The new tables are created by SQLAlchemy `create_all`; no existing tables
   are altered. Back up the database before deployment.
-- The current TALQ device/data routes still return pilot placeholder data.
+- The development branch now implements facility-scoped RDS retrieval for devices, meter/sensor measurements, alerts, alert-derived events, and data packages. Live database and partner-LAN verification remains a deployment task.
   Successful authentication does not mean live meter/sensor data has been
   mapped yet.
-- The gateway scaffold is not a claim of full TALQ 2.7.1 conformance or
-  certification. Validate required models and operations against the actual
+- Measurement queries default to the previous seven days, reject windows over 90 days, and paginate with a maximum page size of 500.
+- `/events` currently maps the known FlowSense alert lifecycle records; it does not imply a separate event table exists.
+- The gateway scaffold is not a claim of full TALQ 2.7.1 conformance or certification. Validate required models and operations against the actual
   TALQ specification and target CMS.
 - This branch does not configure a recurring scheduler. The partner-side
   script demonstrates rotation; production partner software should schedule

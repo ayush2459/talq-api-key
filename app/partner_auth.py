@@ -17,7 +17,6 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from pydantic import BaseModel, Field
 
 from app import main as gateway
-from app.rds_database import rds_engine
 router = APIRouter(tags=["Partner integrations"])
 basic_auth = HTTPBasic(auto_error=False)
 
@@ -162,6 +161,10 @@ def grant_facility_access(
 
     # Verify the facility against the actual FlowSense RDS database.
     try:
+        # Initialize the FlowSense RDS engine only when this endpoint is used.
+        # This keeps application startup and CI tests independent of RDS secrets.
+        from app.rds_database import rds_engine
+
         with rds_engine.connect() as connection:
             facility = connection.execute(
                 text("""
@@ -177,7 +180,7 @@ def grant_facility_access(
                 {"facility_code": facility_code},
             ).mappings().first()
 
-    except SQLAlchemyError as exc:
+    except (SQLAlchemyError, RuntimeError) as exc:
         raise HTTPException(
             status_code=503,
             detail="Unable to validate facility against FlowSense RDS",

@@ -8,13 +8,15 @@ import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
-
+from sqlalchemy import DateTime, ForeignKey, String, Text, bindparam, create_engine, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from dotenv import load_dotenv
+load_dotenv()
 APP_ENV = os.getenv("APP_ENV", "production")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
 EXPECTED_CLIENT_ADDRESS = os.getenv("TALQ_CLIENT_ADDRESS", "").strip()
@@ -340,24 +342,161 @@ def integration_status(api_key: ClientAPIKey = Depends(require_api_key)) -> dict
     }
 
 
-@app.get("/devices", dependencies=[Depends(require_api_key)])
-def list_devices(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
-    return {"devices": DEMO_DEVICES, "clientAddress": client_address}
+def get_authorized_facility_ids(
+    api_key: Any,
+    db: Session,
+) -> list[str]:
+    """
+    Return active facility IDs assigned to an OAuth-managed integration.
+    Legacy keys without facility grants receive no RDS data access.
+    """
+    integration_id = getattr(api_key, "integration_client_id", None)
+
+    if integration_id is None:
+        return []
+
+    # Import locally to avoid changing the existing circular-import structure.
+    from app.partner_auth import IntegrationFacilityAccess
+
+    facility_ids = db.scalars(
+        select(IntegrationFacilityAccess.facility_id).where(
+            IntegrationFacilityAccess.integration_client_id == integration_id,
+            IntegrationFacilityAccess.is_active.is_(True),
+            IntegrationFacilityAccess.revoked_at.is_(None),
+        )
+    ).all()
+
+    return list(facility_ids)
 
 
-@app.get("/devices/count", dependencies=[Depends(require_api_key)])
-def count_devices(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:
-    return {"count": len(DEMO_DEVICES), "clientAddress": client_address}
+def fetch_authorized_devices(
+    facility_ids: list[str],
+    device_code: str | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch only devices belonging to the supplied authorized facilities."""
+
+    if not facility_ids:
+        return []
+
+    # Import locally; RDS remains separate from the Neon authorization DB.
+    from app.rds_database import rds_engine
+
+    device_filter = ""
+    params: dict[str, Any] = {"facility_ids": facility_ids}
+
+    if device_code is not None:
+        device_filter = "AND d.device_code = :device_code"
+        params["device_code"] = device_code
+
+    query = text(f"""
+        SELECT
+            d.iot_device_id::text AS device_id,
+            d.device_code AS device_address,
+            d.device_name AS device_name,
+            d.device_model AS device_model,
+            d.firmware_version AS firmware_version,
+            d.communication_protocol AS communication_protocol,
+            d.installation_location AS installation_location,
+            d.status AS status,
+            d.last_seen_at AS last_seen_at,
+            f.facility_code AS facility_code
+        FROM iot_devices d
+        INNER JOIN facilities f
+            ON f.facility_id = d.facility_id
+        WHERE d.facility_id::text IN :facility_ids
+        {device_filter}
+        ORDER BY d.device_code
+    """).bindparams(
+        bindparam("facility_ids", expanding=True)
+    )
+
+    try:
+        with rds_engine.connect() as connection:
+            rows = connection.execute(query, params).mappings().all()
+
+        devices = []
+
+        for row in rows:
+            devices.append({
+                "deviceId": row["device_id"],
+                "deviceAddress": row["device_address"],
+                "deviceName": row["device_name"],
+                "deviceModel": row["device_model"],
+                "firmwareVersion": row["firmware_version"],
+                "communicationProtocol": row["communication_protocol"],
+                "installationLocation": row["installation_location"],
+                "status": row["status"],
+                "lastSeenAt": (
+                    row["last_seen_at"].isoformat()
+                    if row["last_seen_at"] else None
+                ),
+                "facilityCode": row["facility_code"],
+            })
+
+        return devices
+
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to retrieve authorized FlowSense devices",
+        ) from exc
 
 
-@app.get("/devices/{deviceAddress}", dependencies=[Depends(require_api_key)])
-def get_device(deviceAddress: str, client_address: str = Depends(require_talq_headers)) -> JSONResponse:
-    for device in DEMO_DEVICES:
-        address = device.get("deviceAddress") or device.get("address")
-        if address == deviceAddress:
-            return JSONResponse({"device": device, "clientAddress": client_address})
-    raise HTTPException(status_code=404, detail="Device not found in configured gateway data")
+@app.get("/devices")
+def list_devices(
+    client_address: str = Depends(require_talq_headers),
+    api_key: Any = Depends(require_api_key),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    facility_ids = get_authorized_facility_ids(api_key, db)
+    devices = fetch_authorized_devices(facility_ids)
 
+    return {
+        "devices": devices,
+        "clientAddress": client_address,
+        "count": len(devices),
+    }
+
+
+@app.get("/devices/count")
+def count_devices(
+    client_address: str = Depends(require_talq_headers),
+    api_key: Any = Depends(require_api_key),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    facility_ids = get_authorized_facility_ids(api_key, db)
+    devices = fetch_authorized_devices(facility_ids)
+
+    return {
+        "count": len(devices),
+        "clientAddress": client_address,
+    }
+
+
+@app.get("/devices/{deviceAddress}")
+def get_device(
+    deviceAddress: str,
+    client_address: str = Depends(require_talq_headers),
+    api_key: Any = Depends(require_api_key),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    facility_ids = get_authorized_facility_ids(api_key, db)
+
+    devices = fetch_authorized_devices(
+        facility_ids,
+        device_code=deviceAddress,
+    )
+
+    if not devices:
+        raise HTTPException(
+            status_code=404,
+            detail="Device not found in authorized facilities",
+        )
+
+    return JSONResponse({
+        "device": devices[0],
+        "clientAddress": client_address,
+    })
 
 @app.get("/services", dependencies=[Depends(require_api_key)])
 def list_services(client_address: str = Depends(require_talq_headers)) -> dict[str, Any]:

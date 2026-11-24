@@ -11,12 +11,13 @@ from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from pydantic import BaseModel, Field
 
 from app import main as gateway
-
+from app.rds_database import rds_engine
 router = APIRouter(tags=["Partner integrations"])
 basic_auth = HTTPBasic(auto_error=False)
 
@@ -37,7 +38,8 @@ class ProvisionIntegrationInput(BaseModel):
     # Least privilege: device-read access is the default. Admins may explicitly
     # approve additional data categories when provisioning a partner.
     scopes: list[str] = Field(default_factory=lambda: ["devices:read"])
-
+class GrantFacilityAccessInput(BaseModel):
+    facility_code: str = Field(min_length=1, max_length=80)
 
 class IntegrationClient(gateway.Base):
     __tablename__ = "integration_clients"
@@ -90,6 +92,42 @@ class IntegrationAPIKey(gateway.Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class IntegrationFacilityAccess(gateway.Base):
+    """Facility-level authorization for partner integrations."""
+    __tablename__ = "integration_facility_access"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "integration_client_id",
+            "facility_id",
+            name="uq_integration_facility_access",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    integration_client_id: Mapped[int] = mapped_column(
+        ForeignKey("integration_clients.id"),
+        index=True,
+    )
+
+    # These identifiers belong to the separate FlowSense RDS database.
+    # No cross-database foreign key is used.
+    facility_id: Mapped[str] = mapped_column(String(36), index=True)
+    facility_code: Mapped[str] = mapped_column(String(80), index=True)
+
+    is_active: Mapped[bool] = mapped_column(default=True, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=_now,
+    )
+
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
 # Create only the new tables; existing gateway tables are left unchanged.
 gateway.Base.metadata.create_all(bind=gateway.engine)
 # The gateway's existing X-API-Key dependency uses this model as an additional
@@ -99,6 +137,166 @@ gateway.IntegrationAPIKey = IntegrationAPIKey
 
 def _scopes(client: IntegrationClient) -> set[str]:
     return {part for part in client.scopes.split() if part}
+
+@router.post("/admin/integrations/{integration_id}/facilities", tags=["Admin"])
+def grant_facility_access(
+    integration_id: int,
+    payload: GrantFacilityAccessInput,
+    _: None = Depends(gateway.require_admin_key),
+    db: Session = Depends(gateway.get_db),
+) -> dict[str, Any]:
+    """Grant an integration access to one verified FlowSense facility."""
+
+    client = db.get(IntegrationClient, integration_id)
+
+    if client is None:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    if not client.is_active:
+        raise HTTPException(status_code=409, detail="Integration is inactive")
+
+    facility_code = payload.facility_code.strip()
+
+    if not facility_code:
+        raise HTTPException(status_code=422, detail="facility_code cannot be blank")
+
+    # Verify the facility against the actual FlowSense RDS database.
+    try:
+        with rds_engine.connect() as connection:
+            facility = connection.execute(
+                text("""
+                    SELECT
+                        facility_id::text AS facility_id,
+                        facility_code,
+                        facility_name,
+                        status
+                    FROM facilities
+                    WHERE facility_code = :facility_code
+                    LIMIT 1
+                """),
+                {"facility_code": facility_code},
+            ).mappings().first()
+
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to validate facility against FlowSense RDS",
+        ) from exc
+
+    if facility is None:
+        raise HTTPException(status_code=404, detail="Facility not found in FlowSense")
+
+    # Reuse an existing permission if it was previously revoked.
+    access = db.scalar(
+        select(IntegrationFacilityAccess).where(
+            IntegrationFacilityAccess.integration_client_id == client.id,
+            IntegrationFacilityAccess.facility_id == facility["facility_id"],
+        )
+    )
+
+    if access is not None:
+        access.facility_code = facility["facility_code"]
+        access.is_active = True
+        access.revoked_at = None
+    else:
+        access = IntegrationFacilityAccess(
+            integration_client_id=client.id,
+            facility_id=facility["facility_id"],
+            facility_code=facility["facility_code"],
+            is_active=True,
+        )
+        db.add(access)
+
+    db.commit()
+    db.refresh(access)
+
+    return {
+        "message": "Facility access granted",
+        "integration_id": client.id,
+        "facility_id": access.facility_id,
+        "facility_code": access.facility_code,
+        "facility_name": facility["facility_name"],
+        "facility_status": facility["status"],
+        "active": access.is_active,
+    }
+
+
+@router.get("/admin/integrations/{integration_id}/facilities", tags=["Admin"])
+def list_integration_facilities(
+    integration_id: int,
+    _: None = Depends(gateway.require_admin_key),
+    db: Session = Depends(gateway.get_db),
+) -> dict[str, Any]:
+    """List all facility permissions assigned to an integration."""
+
+    client = db.get(IntegrationClient, integration_id)
+
+    if client is None:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    rows = db.scalars(
+        select(IntegrationFacilityAccess)
+        .where(
+            IntegrationFacilityAccess.integration_client_id == client.id
+        )
+        .order_by(IntegrationFacilityAccess.facility_code)
+    ).all()
+
+    return {
+        "integration_id": client.id,
+        "count": len(rows),
+        "facilities": [
+            {
+                "facility_id": row.facility_id,
+                "facility_code": row.facility_code,
+                "active": row.is_active,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "revoked_at": row.revoked_at.isoformat() if row.revoked_at else None,
+            }
+            for row in rows
+        ],
+    }
+
+
+@router.delete(
+    "/admin/integrations/{integration_id}/facilities/{facility_code}",
+    tags=["Admin"],
+)
+def revoke_facility_access(
+    integration_id: int,
+    facility_code: str,
+    _: None = Depends(gateway.require_admin_key),
+    db: Session = Depends(gateway.get_db),
+) -> dict[str, Any]:
+    """Revoke a partner's access to a specific facility."""
+
+    client = db.get(IntegrationClient, integration_id)
+
+    if client is None:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    access = db.scalar(
+        select(IntegrationFacilityAccess).where(
+            IntegrationFacilityAccess.integration_client_id == client.id,
+            IntegrationFacilityAccess.facility_code == facility_code,
+        )
+    )
+
+    if access is None:
+        raise HTTPException(status_code=404, detail="Facility permission not found")
+
+    if access.is_active:
+        access.is_active = False
+        access.revoked_at = _now()
+        db.commit()
+
+    return {
+        "message": "Facility access revoked",
+        "integration_id": client.id,
+        "facility_code": access.facility_code,
+        "active": False,
+        "revoked_at": access.revoked_at.isoformat() if access.revoked_at else None,
+    }
 
 
 def require_oauth_token(

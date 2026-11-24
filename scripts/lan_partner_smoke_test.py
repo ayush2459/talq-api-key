@@ -17,6 +17,8 @@ CLIENT_ID = os.environ["FLOWSENSE_CLIENT_ID"]
 CLIENT_SECRET = os.environ["FLOWSENSE_CLIENT_SECRET"]
 CLIENT_ADDRESS = os.environ["FLOWSENSE_CLIENT_ADDRESS"]
 SECRET_FILE = Path(os.getenv("FLOWSENSE_PARTNER_SECRET_FILE", ".partner-key.json"))
+TEST_SCOPES = sorted(set(os.getenv("FLOWSENSE_TEST_SCOPES", "devices:read").split()))
+TALQ_HEADERS = {"talq-api-version": "2.7.1"}
 
 
 def call(method: str, path: str, *, headers=None, body=None):
@@ -44,7 +46,7 @@ def get_access_token() -> str:
     basic = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
     form = urlencode({
         "grant_type": "client_credentials",
-        "scope": "keys:manage devices:read",
+        "scope": " ".join(sorted(set(TEST_SCOPES) | {"keys:manage"})),
     }).encode()
     result = call(
         "POST",
@@ -60,16 +62,25 @@ def get_access_token() -> str:
 
 
 def verify_key(api_key: str) -> None:
+    headers = {"X-API-Key": api_key, **TALQ_HEADERS}
     call("GET", "/auth/verify", headers={"X-API-Key": api_key})
-    call(
-        "GET",
-        "/devices?" + urlencode({"clientAddress": CLIENT_ADDRESS}),
-        headers={
-            "X-API-Key": api_key,
-            "talq-api-version": "2.7.1",
-        },
-    )
-    print("[OK] New API key authenticated and gateway route accepted it")
+
+    def verify_route(path: str, label: str, count_field: str) -> None:
+        result = call(
+            "GET",
+            path + ("&" if "?" in path else "?") + urlencode({"clientAddress": CLIENT_ADDRESS}),
+            headers=headers,
+        )
+        print(f"[OK] {label} route accepted the key ({result.get(count_field, 'response received')} records/items)")
+
+    verify_route("/devices", "Devices", "count")
+    if {"energy:read", "water:read"} & set(TEST_SCOPES):
+        verify_route("/measurements?limit=5", "Measurements", "count")
+    if "alerts:read" in TEST_SCOPES:
+        verify_route("/alerts?limit=5", "Alerts", "count")
+        verify_route("/events?limit=5", "Events", "count")
+    if {"energy:read", "water:read", "alerts:read"} & set(TEST_SCOPES):
+        verify_route("/data-packages?limit=5", "Data packages", "count")
 
 
 def save_secret(payload: dict) -> None:
@@ -117,7 +128,8 @@ def main() -> None:
         })
 
     print("[DONE] Partner OAuth and API-key lifecycle smoke test passed.")
-    print("Note: the current /devices route returns pilot placeholder data until live FlowSense data is mapped.")
+    print(f"Verified routes for approved scopes: {", ".join(TEST_SCOPES)}")
+    print("A successful HTTP response confirms API behavior; compare returned records with authorized live RDS data during acceptance testing.")
 
 
 if __name__ == "__main__":

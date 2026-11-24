@@ -43,8 +43,9 @@ No partner webpage is required.
 
 See [docs/LAN_PARTNER_AUTH.md](docs/LAN_PARTNER_AUTH.md) for LAN setup and
 the independent Python smoke test in `scripts/lan_partner_smoke_test.py`.
-The current gateway data routes remain pilot placeholders until live FlowSense
-meter/device data is connected.
+The branch now includes facility-scoped RDS queries for devices, meter/sensor
+measurements, alerts, events, and data packages. Live AWS connectivity and
+partner-LAN interoperability still require deployment-side verification.
 
 ### Protected gateway pilot routes (requires `X-API-Key`)
 - `GET /integration-status`
@@ -53,7 +54,10 @@ meter/device data is connected.
 - `GET /devices/{deviceAddress}`
 - `GET /services`
 - `GET /services/{serviceName}`
-- `GET /data-packages`
+- `GET /measurements` — bounded, paginated energy/water meter and sensor readings (requires `energy:read` and/or `water:read`).
+- `GET /alerts` — facility-scoped FlowSense alerts (requires `alerts:read`).
+- `GET /events` — alert lifecycle records exposed as gateway events (requires `alerts:read`).
+- `GET /data-packages` — packages assembled from the partner's authorized measurement and alert scopes.
 
 Gateway routes also require the `talq-api-version: 2.7.1` header and `clientAddress` query parameter. The requested client address must match the one associated with the issued key. These are pilot routes and response payloads, not proof of complete TALQ 2.7.1 conformance.
 
@@ -141,8 +145,8 @@ An administrator then lists pending requests and approves the returned request I
 
 ## Current limitations
 
-- No live MQTT, sensor, meter, or production database integration with FlowSense business data.
-- Device and data-package lists are empty placeholders.
+- This gateway reads existing FlowSense RDS records; it does not ingest MQTT telemetry or replace the FlowSense sensor-ingestion pipeline.
+- Live RDS-backed device, measurement, alert, event, and data-package routes are implemented on the development branch; actual RDS connectivity and returned payloads still require environment-level verification.
 - Only a limited set of gateway-style routes is present.
 - No complete TALQ schema validation or external CMS interoperability test has been demonstrated.
 - The service is not TALQ-certified.

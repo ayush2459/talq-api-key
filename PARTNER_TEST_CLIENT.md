@@ -7,8 +7,9 @@ on the partner machine.
 ## Prerequisites
 
 - Python 3.10 or newer.
-- Install dependencies: `python -m pip install -r requirements.txt`
-  (on macOS, use `python3` if that is the installed command).
+- Install the client dependency: `python -m pip install cryptography`
+  (on macOS, use `python3 -m pip install cryptography`). The client otherwise
+  uses only the Python standard library.
 - Network access to the FlowSense partner listener. A remote home network
   generally needs an approved VPN or other private network route; the
   FlowSense LAN IP is not publicly routable.

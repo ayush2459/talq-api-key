@@ -248,6 +248,25 @@ def approve_access_request(request_id: int, db: Session = Depends(get_db)) -> di
         raise HTTPException(status_code=404, detail="Access request not found")
     if item.status != "pending":
         raise HTTPException(status_code=409, detail=f"Request is already {item.status}")
+    enrollment_model = globals().get("PartnerEnrollment")
+    enrollment = (
+        db.scalar(select(enrollment_model).where(enrollment_model.access_request_id == item.id))
+        if enrollment_model is not None else None
+    )
+    item.status = "approved"
+    if enrollment is not None:
+        enrollment.status = "approved"
+        db.commit()
+        return {
+            "request_id": item.id,
+            "status": "approved",
+            "credential_delivery": "partner_public_key_encrypted_claim",
+            "message": "OAuth credentials will be delivered to the partner through its one-time encrypted claim.",
+        }
+
+    # Backward-compatible legacy approval for requests created through the
+    # internal-only legacy endpoint. New partner API requests never receive
+    # a legacy API key from the approval operation.
     raw_key = "fs_talq_" + secrets.token_urlsafe(36)
     record = ClientAPIKey(
         access_request_id=item.id,
@@ -258,11 +277,9 @@ def approve_access_request(request_id: int, db: Session = Depends(get_db)) -> di
         key_prefix=raw_key[:15],
         key_hash=hash_api_key(raw_key),
     )
-    item.status = "approved"
     db.add(record)
     db.commit()
     db.refresh(record)
-    # The raw key is returned once only; only its hash is persisted.
     return {
         "request_id": item.id,
         "api_key_id": record.id,
@@ -281,6 +298,14 @@ def reject_access_request(request_id: int, db: Session = Depends(get_db)) -> dic
     if item.status != "pending":
         raise HTTPException(status_code=409, detail=f"Request is already {item.status}")
     item.status = "rejected"
+    enrollment_model = globals().get("PartnerEnrollment")
+    if enrollment_model is not None:
+        enrollment = db.scalar(select(enrollment_model).where(
+            enrollment_model.access_request_id == item.id
+        ))
+        if enrollment is not None:
+            enrollment.status = "rejected"
+            enrollment.encrypted_credentials = None
     db.commit()
     return {"request_id": item.id, "status": "rejected"}
 
@@ -792,4 +817,7 @@ def get_service(serviceName: str, client_address: str = Depends(require_talq_hea
 # Register the backend-only OAuth and partner key lifecycle routes after the
 # existing gateway models and dependencies have been defined.
 from app.partner_auth import router as partner_auth_router  # noqa: E402
+from app.onboarding import PartnerEnrollment, router as onboarding_router  # noqa: E402
+
 app.include_router(partner_auth_router)
+app.include_router(onboarding_router)

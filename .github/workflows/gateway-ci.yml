@@ -3,10 +3,10 @@ name: Gateway CI
 on:
   push:
     branches:
-      - feature/lan-third-party-integration
+      - "feature/**"
   pull_request:
     branches:
-      - feature/lan-third-party-integration
+      - "feature/**"
 
 permissions:
   contents: read
@@ -32,8 +32,7 @@ jobs:
           pip install pytest httpx
 
       - name: Compile application and test modules
-        run: |
-          python -m compileall -q app tests scripts
+        run: python -m compileall -q app tests scripts
 
       - name: Run test suite
         env:

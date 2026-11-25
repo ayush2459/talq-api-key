@@ -76,7 +76,7 @@ The partner receives a request ID and a random onboarding status token. It store
 py scripts/partner_onboarding_client.py --claim
 ```
 
-The credential envelope uses RSA-OAEP-SHA256 to wrap an AES-256-GCM key. Claims expire 30 minutes after provisioning, and onboarding status tokens expire after 72 hours. The partner's private key and onboarding token must remain private.
+The credential envelope uses RSA-OAEP-SHA256 to wrap an AES-256-GCM key. Claims expire 30 minutes after provisioning, and onboarding status tokens expire after 72 hours. The reference client protects the RSA private key with a local passphrase and stores claimed OAuth credentials in an encrypted local vault. Keep the private key, onboarding token, vault passphrase and encrypted vault private. The internal control plane records metadata-only audit events at `GET /admin/onboarding/{request_id}/audit`. Use `scripts/configure_partner_firewall.ps1 -PartnerIPv4 <approved-partner-ip>` from an elevated PowerShell session and review any pre-existing broad firewall allow rules.
 
 ## Data authorization
 

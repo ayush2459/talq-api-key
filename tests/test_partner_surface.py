@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.partner_app import partner_app
+from app.admin_app import admin_app
 from app.onboarding import PartnerEnrollment
 
 
@@ -30,6 +31,14 @@ def test_partner_surface_blocks_admin_docs_and_legacy_routes():
     assert client.post("/admin/integrations/1/provision").status_code == 404
     assert client.post("/access-requests", json={}).status_code == 404
     assert client.get("/v1/ping").status_code == 200
+
+
+def test_admin_control_plane_rejects_non_loopback_clients():
+    remote = TestClient(admin_app, client=("192.168.1.55", 54321))
+    assert remote.get("/docs").status_code == 404
+    assert remote.get("/admin/access-requests").status_code == 404
+    local = TestClient(admin_app)
+    assert local.get("/docs").status_code == 200
 
 
 def test_partner_onboarding_encrypted_one_time_claim(monkeypatch, tmp_path):

@@ -346,6 +346,54 @@ def revoke_api_key(key_id: int, db: Session = Depends(get_db)) -> dict[str, Any]
     return {"api_key_id": record.id, "revoked": True}
 
 
+@app.get("/v1/test-data", tags=["Testing"])
+def get_isolated_test_data(api_key: Any = Depends(require_api_key)) -> dict[str, Any]:
+    """Return synthetic device fixtures only in the isolated testing environment."""
+    if APP_ENV != "testing" or not DEMO_MODE:
+        raise HTTPException(status_code=404, detail="Not found")
+    scopes = set(getattr(api_key, "scopes", "").split())
+    if hasattr(api_key, "integration_client_id") and "devices:read" not in scopes:
+        raise HTTPException(status_code=403, detail="API key lacks the required data scope")
+    devices = [
+        {
+            "deviceId": "TEST-DEVICE-001",
+            "deviceAddress": "FS-TEST-001",
+            "deviceName": "Synthetic Energy Meter",
+            "deviceModel": "FS-METER-SIM",
+            "firmwareVersion": "1.0.0-test",
+            "communicationProtocol": "MQTT",
+            "installationLocation": "Test Facility A - Floor 1",
+            "status": "online",
+            "lastSeenAt": "2026-11-25T10:00:00+00:00",
+            "facilityCode": "TEST-FACILITY-A",
+            "resourceType": "energy",
+            "isSynthetic": True,
+        },
+        {
+            "deviceId": "TEST-DEVICE-002",
+            "deviceAddress": "FS-TEST-002",
+            "deviceName": "Synthetic Water Meter",
+            "deviceModel": "FS-WATER-SIM",
+            "firmwareVersion": "1.0.0-test",
+            "communicationProtocol": "MQTT",
+            "installationLocation": "Test Facility A - Floor 1",
+            "status": "online",
+            "lastSeenAt": "2026-11-25T10:00:00+00:00",
+            "facilityCode": "TEST-FACILITY-A",
+            "resourceType": "water",
+            "isSynthetic": True,
+        },
+    ]
+    return {
+        "environment": "testing",
+        "source": "synthetic_test_fixture",
+        "notice": "Synthetic test records only; no production RDS data was accessed.",
+        "devices": devices,
+        "count": len(devices),
+        "clientAddress": api_key.client_address,
+    }
+
+
 @app.get("/auth/verify", tags=["Authentication"])
 def verify_api_key(api_key: ClientAPIKey = Depends(require_api_key)) -> dict[str, Any]:
     """Verify a client credential and return safe metadata for the authenticated integration."""

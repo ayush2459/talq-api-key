@@ -1,70 +1,75 @@
-# Partner Backend Authentication Guide
+# FlowSense Partner Backend Integration
 
-This guide explains how an external backend authenticates with the FlowSense TALQ Gateway pilot.
+Partners use only the restricted Partner API listener. They do not receive
+Swagger, admin endpoints, admin credentials, database credentials, AWS access,
+or access to the internal control-plane listener.
 
-## Important status
+## 1. Submit onboarding request
 
-The gateway currently implements API-key authentication and a request/approve/revoke lifecycle. It is still a pilot scaffold: device and data-package lists are empty placeholders until a real FlowSense data source is connected. Do not treat an empty successful response as live FlowSense data or claim TALQ certification.
-
-## 1. Submit an access request
-
-Send `POST /access-requests` to the gateway base URL with JSON:
+Generate an RSA key pair locally (3072 bits recommended). Submit only the
+public key to `POST /v1/onboarding/requests`:
 
 ```json
 {
-  "contact_name": "Partner contact name",
-  "email": "partner technical contact email",
-  "organization": "Partner organization",
-  "purpose": "Backend-to-backend integration with FlowSense",
-  "client_address": "Partner's agreed TALQ clientAddress"
+  "contact_name": "Partner Contact",
+  "email": "partner@example.com",
+  "organization": "Example Partner",
+  "purpose": "Backend integration for approved FlowSense IoT data.",
+  "client_address": "example-partner-01",
+  "public_key_pem": "-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----"
 }
 ```
 
-The response includes a `request_id` and `status: pending`. This does not issue a key.
+The response contains `request_id` and a random `status_token`. Save the
+status token securely. It is required in the `X-Onboarding-Token` header for
+status checks and the one-time claim. The token expires after 72 hours.
 
-Agree the exact `client_address` value with the partner before submitting. The same value must be sent on protected gateway requests.
-
-## 2. Administrator approves and issues a key
-
-An authorized administrator calls:
-
-- `GET /admin/access-requests?status=pending`
-- `POST /admin/access-requests/{request_id}/approve`
-
-Include the admin secret in the `X-Admin-Key` header. Keep this secret private; it is not the partner's API key.
-
-The approval response returns a new `fs_talq_...` client API key once. Copy it into the partner's secret manager or another secure secret store. It cannot be retrieved from the gateway later; only a hash is stored.
-
-## 3. Partner calls the gateway
-
-Example request:
+## 2. Poll for approval
 
 ```http
-GET /devices?clientAddress=PARTNER_CLIENT_ADDRESS
-Host: flowsense-talq-gateway.onrender.com
-X-API-Key: fs_talq_REPLACE_WITH_ISSUED_KEY
-talq-api-version: 2.7.1
-Accept: application/json
+GET /v1/onboarding/requests/{request_id}
+X-Onboarding-Token: <private-status-token>
 ```
 
-Replace the example key and address with the values issued/agreed for the partner. Never place an API key in a URL, browser code, or public repository.
+Possible statuses include `pending`, `approved`, `credentials_ready`,
+`credentials_claimed`, and `rejected`.
 
-For a simple connectivity/authentication check, call `GET /integration-status` with `X-API-Key`. TALQ-style routes such as `/devices` also require `talq-api-version: 2.7.1` and the approved `clientAddress` query parameter.
+## 3. Claim encrypted credentials
 
-## 4. Revoke access
+After FlowSense approves and provisions the integration, call:
 
-An administrator can list issued key metadata with `GET /admin/api-keys` and revoke a key using `POST /admin/api-keys/{key_id}/revoke`. Revocation invalidates that key.
+```http
+POST /v1/onboarding/requests/{request_id}/claim
+X-Onboarding-Token: <private-status-token>
+```
 
-## CORS and network security
+The response contains an encrypted credential envelope. It is encrypted with
+a random AES-256-GCM key; that key is wrapped using the submitted RSA public
+key with RSA-OAEP-SHA256. Decrypt it locally using the matching private key.
+The private key is never sent to FlowSense. The claim can be used once and
+expires 30 minutes after provisioning.
 
-CORS is normally unnecessary for backend-to-backend HTTP calls. Use HTTPS and send the API key in the `X-API-Key` header. If the partner's browser-based frontend calls this API directly, discuss a strict CORS allowlist separately; never use CORS as authentication.
+## 4. Authenticate and create a TALQ API key
 
-## Production checklist
+Exchange the claimed Client ID and Client Secret at `POST /oauth/token`
+using HTTP Basic authentication and `grant_type=client_credentials`. Request
+only the scopes approved by FlowSense. Use the resulting Bearer token to call
+`GET /integrations/me` and `POST /integrations/me/api-keys`.
 
-- Set a strong, private `ADMIN_API_KEY` in Render.
-- Configure `DATABASE_URL` to a persistent PostgreSQL database before issuing production keys.
-- Use the deployed gateway's HTTPS base URL.
-- Keep each partner on a unique key; never share the admin secret.
-- Confirm the intended TALQ version and required endpoint schemas with the partner.
-- Connect and validate actual FlowSense data before promising device/measurement access.
-- Run an interoperability test with the partner's backend. API-key authentication alone does not establish TALQ conformance or certification.
+Use the returned API key in `X-API-Key` for data calls, with
+`talq-api-version: 2.7.1` and the exact approved `clientAddress` query
+parameter. API keys expire after 30 days by default; rotate before expiry,
+verify the replacement, then retire the old key.
+
+## Security requirements
+
+- Never request or use `X-Admin-Key`.
+- Never call `/admin/*`, `/docs`, `/redoc`, `/openapi.json`, or legacy
+  `/access-requests`; the partner listener returns 404 for these paths.
+- Do not send the RSA private key to FlowSense.
+- Keep status token, private key, Client Secret, OAuth tokens and API key in
+  the partner's secret manager or protected local store.
+- Use HTTPS with certificate validation. CORS is not relevant to backend-to-
+  backend calls.
+- A successful authentication response does not guarantee live data mapping
+  or TALQ certification. Validate data and interoperability with FlowSense.

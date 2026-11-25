@@ -363,13 +363,46 @@ def rotate_client_secret(
     for token in active_tokens:
         token.revoked_at = now
 
+    from app.onboarding import PartnerEnrollment, audit_enrollment, encrypt_credentials
+    enrollment = db.scalar(select(PartnerEnrollment).where(
+        PartnerEnrollment.access_request_id == client.access_request_id
+    ))
+    if enrollment is not None:
+        enrollment.encrypted_credentials = encrypt_credentials(
+            enrollment.public_key_pem,
+            {
+                "client_id": client.client_id,
+                "client_secret": new_secret,
+                "integration_id": client.id,
+                "scopes": sorted(_scopes(client)),
+                "token_url": "/oauth/token",
+            },
+        )
+        enrollment.claimed_at = None
+        enrollment.status = "credentials_ready"
+        enrollment.onboarding_expires_at = now + timedelta(hours=72)
+        enrollment.claim_expires_at = now + timedelta(minutes=30)
+        audit_enrollment(
+            db, client.access_request_id, "client_secret_rotated", "admin",
+            {"integration_id": client.id},
+        )
+        db.commit()
+        return {
+            "integration_id": client.id,
+            "client_id": client.client_id,
+            "credential_delivery": "encrypted_one_time_claim",
+            "claim_expires_at": enrollment.claim_expires_at.isoformat(),
+            "revoked_access_tokens": len(active_tokens),
+            "message": "New secret encrypted for the partner's registered public key. Partner must claim it once.",
+        }
+
     db.commit()
     return {
         "integration_id": client.id,
         "client_id": client.client_id,
         "client_secret": new_secret,
         "revoked_access_tokens": len(active_tokens),
-        "warning": "Save the new client secret now. It is shown once and cannot be retrieved.",
+        "warning": "Legacy internal rotation: save the new client secret now. It is shown once and cannot be retrieved.",
     }
 
 
@@ -406,6 +439,43 @@ def provision_integration(
         is_active=True,
     )
     db.add(client)
+    db.flush()
+
+    # API-originated partner enrollments have a submitted public key. In that
+    # case the client secret is never returned to the administrator or logged:
+    # it is sealed to the partner's public key and claimed exactly once.
+    from app.onboarding import PartnerEnrollment, audit_enrollment, encrypt_credentials
+    enrollment = db.scalar(select(PartnerEnrollment).where(
+        PartnerEnrollment.access_request_id == request_record.id
+    ))
+    if enrollment is not None:
+        enrollment.encrypted_credentials = encrypt_credentials(
+            enrollment.public_key_pem,
+            {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "integration_id": client.id,
+                "scopes": sorted(requested_scopes | {"keys:manage"}),
+                "token_url": "/oauth/token",
+            },
+        )
+        enrollment.status = "credentials_ready"
+        enrollment.claim_expires_at = _now() + timedelta(minutes=30)
+        audit_enrollment(
+            db, request_record.id, "credentials_provisioned", "admin",
+            {"integration_id": client.id, "scopes": sorted(requested_scopes | {"keys:manage"})},
+        )
+        db.commit()
+        db.refresh(client)
+        return {
+            "integration_id": client.id,
+            "client_id": client.client_id,
+            "scopes": sorted(requested_scopes | {"keys:manage"}),
+            "credential_delivery": "encrypted_one_time_claim",
+            "claim_expires_at": enrollment.claim_expires_at.isoformat(),
+            "message": "Credentials encrypted for the partner public key. The partner must claim them within 30 minutes.",
+        }
+
     db.commit()
     db.refresh(client)
     return {
@@ -413,7 +483,7 @@ def provision_integration(
         "client_id": client.client_id,
         "client_secret": client_secret,
         "scopes": sorted(requested_scopes | {"keys:manage"}),
-        "warning": "Save the client secret now. It is shown once and cannot be retrieved.",
+        "warning": "Legacy internal provisioning: save the client secret now. It is shown once and cannot be retrieved.",
     }
 
 

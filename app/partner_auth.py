@@ -363,13 +363,46 @@ def rotate_client_secret(
     for token in active_tokens:
         token.revoked_at = now
 
+    from app.onboarding import PartnerEnrollment, audit_enrollment, encrypt_credentials
+    enrollment = db.scalar(select(PartnerEnrollment).where(
+        PartnerEnrollment.access_request_id == client.access_request_id
+    ))
+    if enrollment is not None:
+        enrollment.encrypted_credentials = encrypt_credentials(
+            enrollment.public_key_pem,
+            {
+                "client_id": client.client_id,
+                "client_secret": new_secret,
+                "integration_id": client.id,
+                "scopes": sorted(_scopes(client)),
+                "token_url": "/oauth/token",
+            },
+        )
+        enrollment.claimed_at = None
+        enrollment.status = "credentials_ready"
+        enrollment.onboarding_expires_at = now + timedelta(hours=72)
+        enrollment.claim_expires_at = now + timedelta(minutes=30)
+        audit_enrollment(
+            db, client.access_request_id, "client_secret_rotated", "admin",
+            {"integration_id": client.id},
+        )
+        db.commit()
+        return {
+            "integration_id": client.id,
+            "client_id": client.client_id,
+            "credential_delivery": "encrypted_one_time_claim",
+            "claim_expires_at": enrollment.claim_expires_at.isoformat(),
+            "revoked_access_tokens": len(active_tokens),
+            "message": "New secret encrypted for the partner's registered public key. Partner must claim it once.",
+        }
+
     db.commit()
     return {
         "integration_id": client.id,
         "client_id": client.client_id,
         "client_secret": new_secret,
         "revoked_access_tokens": len(active_tokens),
-        "warning": "Save the new client secret now. It is shown once and cannot be retrieved.",
+        "warning": "Legacy internal rotation: save the new client secret now. It is shown once and cannot be retrieved.",
     }
 
 

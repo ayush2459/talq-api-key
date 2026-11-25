@@ -25,6 +25,7 @@ def test_partner_surface_blocks_admin_docs_and_legacy_routes():
     assert client.get("/docs").status_code == 404
     assert client.get("/openapi.json").status_code == 404
     assert client.get("/admin/access-requests").status_code == 404
+    assert client.get("/admin/onboarding/1/audit").status_code == 404
     assert client.post("/admin/integrations/1/provision").status_code == 404
     assert client.post("/access-requests", json={}).status_code == 404
     assert client.get("/v1/ping").status_code == 200
@@ -103,3 +104,14 @@ def test_partner_onboarding_encrypted_one_time_claim(monkeypatch, tmp_path):
         headers=partner_headers,
     )
     assert repeated.status_code == 409
+
+    audit = internal.get(
+        f"/admin/onboarding/{request_id}/audit",
+        headers={"X-Admin-Key": "onboarding-admin-key"},
+    )
+    assert audit.status_code == 200, audit.text
+    event_types = [event["event_type"] for event in audit.json()["events"]]
+    assert event_types == [
+        "request_submitted", "request_approved",
+        "credentials_provisioned", "credentials_claimed",
+    ]

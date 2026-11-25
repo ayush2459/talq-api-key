@@ -1,91 +1,79 @@
-# Client Backend Integration Guide
+# FlowSense Partner Backend Integration
 
-Base URL:
-- Production: `https://flowsense-talq-gateway.onrender.com`
-- Local development: `http://127.0.0.1:8000`
+Partners use only the restricted Partner API listener. They do not receive
+Swagger, admin endpoints, admin credentials, database credentials, AWS access,
+or access to the internal control-plane listener.
 
-This is server-to-server HTTPS authentication. CORS is not required for calls made directly from one backend to another. Do not expose the API key in browser code, frontend JavaScript, URLs, or logs.
+## 1. Submit onboarding request
 
-## 1. Request access
-
-Send `POST /access-requests` with JSON:
+Generate an RSA key pair locally (3072 bits recommended). Submit only the
+public key to `POST /v1/onboarding/requests`:
 
 ```json
 {
-  "contact_name": "Integration Contact",
-  "email": "integration@example.com",
-  "organization": "Partner Organization",
-  "purpose": "Backend integration with FlowSense gateway",
-  "client_address": "partner-system-01"
+  "contact_name": "Partner Contact",
+  "email": "partner@example.com",
+  "organization": "Example Partner",
+  "purpose": "Backend integration for approved FlowSense IoT data.",
+  "client_address": "example-partner-01",
+  "public_key_pem": "-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----"
 }
 ```
 
-The response contains a request ID. A request does not grant access until the gateway administrator approves it.
+The response contains `request_id` and a random `status_token`. Save the
+status token securely. It is required in the `X-Onboarding-Token` header for
+status checks and the one-time claim. The token expires after 72 hours.
 
-## 2. Administrator approves the request
-
-Use Swagger UI or an HTTP client to call:
-
-`POST /admin/access-requests/{request_id}/approve`
-
-Include the secret admin header `X-Admin-Key`. The response contains the client API key once. The administrator must securely send that key to the partner through an approved secret-sharing channel. Never send the admin key to the partner.
-
-## 3. Verify the key
+## 2. Poll for approval
 
 ```http
-GET /auth/verify
-X-API-Key: <issued-client-api-key>
+GET /v1/onboarding/requests/{request_id}
+X-Onboarding-Token: <private-status-token>
 ```
 
-A successful response confirms authentication and returns safe metadata for the organization and registered client address. A missing, invalid, or revoked key returns HTTP 401.
+Possible statuses include `pending`, `approved`, `credentials_ready`,
+`credentials_claimed`, and `rejected`.
 
-## 4. Call a gateway route
+## 3. Claim encrypted credentials
+
+After FlowSense approves and provisions the integration, call:
 
 ```http
-GET /devices?clientAddress=partner-system-01
-X-API-Key: <issued-client-api-key>
-talq-api-version: 2.7.1
+POST /v1/onboarding/requests/{request_id}/claim
+X-Onboarding-Token: <private-status-token>
 ```
 
-Use the exact `clientAddress` approved for that API key. Gateway routes that require TALQ-style headers reject a mismatched address.
+The response contains an encrypted credential envelope. It is encrypted with
+a random AES-256-GCM key; that key is wrapped using the submitted RSA public
+key with RSA-OAEP-SHA256. Decrypt it locally using the matching private key.
+The private key is never sent to FlowSense. The claim can be used once and
+expires 30 minutes after provisioning.
 
-## 5. Python example
+## 4. Authenticate and create a TALQ API key
 
-```python
-import os
-import urllib.error
-import urllib.request
+Exchange the claimed Client ID and Client Secret at `POST /oauth/token`
+using HTTP Basic authentication and `grant_type=client_credentials`. Request
+only the scopes approved by FlowSense. Use the resulting Bearer token to call
+`GET /integrations/me` and `POST /integrations/me/api-keys`.
 
-BASE_URL = os.environ["FLOWSENSE_GATEWAY_URL"].rstrip("/")
-API_KEY = os.environ["FLOWSENSE_API_KEY"]
-CLIENT_ADDRESS = os.environ["FLOWSENSE_CLIENT_ADDRESS"]
+Use the returned API key in `X-API-Key` for data calls, with
+`talq-api-version: 2.7.1` and the exact approved `clientAddress` query
+parameter. API keys expire after 30 days by default; rotate before expiry,
+verify the replacement, then retire the old key.
 
-def get_json(path: str):
-    request = urllib.request.Request(
-        f"{BASE_URL}{path}",
-        headers={
-            "X-API-Key": API_KEY,
-            "talq-api-version": "2.7.1",
-            "Accept": "application/json",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=15) as response:
-        return response.read().decode("utf-8")
+## Security requirements
 
-# Verify authentication first. This route does not require TALQ headers.
-verify_request = urllib.request.Request(
-    f"{BASE_URL}/auth/verify",
-    headers={"X-API-Key": API_KEY, "Accept": "application/json"},
-)
-with urllib.request.urlopen(verify_request, timeout=15) as response:
-    print(response.read().decode("utf-8"))
+- Never request or use `X-Admin-Key`.
+- Never call `/admin/*`, `/docs`, `/redoc`, `/openapi.json`, or legacy
+  `/access-requests`; the partner listener returns 404 for these paths.
+- Do not send the RSA private key to FlowSense.
+- Keep status token, private key, Client Secret, OAuth tokens and API key in
+  the partner's secret manager or protected local store.
+- Use HTTPS with certificate validation. CORS is not relevant to backend-to-
+  backend calls.
+- A successful authentication response does not guarantee live data mapping
+  or TALQ certification. Validate data and interoperability with FlowSense.
 
-# Then call a gateway route using the approved clientAddress.
-print(get_json(f"/devices?clientAddress={CLIENT_ADDRESS}"))
-```
+## Reference client
 
-Configure `FLOWSENSE_GATEWAY_URL`, `FLOWSENSE_API_KEY`, and `FLOWSENSE_CLIENT_ADDRESS` as environment variables on the partner backend. Do not hard-code credentials.
-
-## Important scope limitation
-
-The gateway currently authenticates callers, but `/devices` and `/data-packages` return empty placeholder collections until real FlowSense device/meter data is connected and mapped. Successful authentication therefore does not yet mean live FlowSense data is available. The current scaffold is not a complete or TALQ-certified implementation; confirm the required TALQ operations and payload schemas with the target CMS before production use.
+Use `scripts/partner_onboarding_client.py` as the reference Python client. Configure `FLOWSENSE_BASE_URL` and the `PARTNER_*` environment variables, then run `py scripts/partner_onboarding_client.py` to submit. After FlowSense approval and provisioning, run `py scripts/partner_onboarding_client.py --claim` to claim and decrypt the one-time credential package locally.

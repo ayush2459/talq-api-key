@@ -68,7 +68,7 @@ verify the replacement, then retire the old key.
   `/access-requests`; the partner listener returns 404 for these paths.
 - Do not send the RSA private key to FlowSense.
 - Keep status token, private key, Client Secret, OAuth tokens and API key in
-  the partner's secret manager or protected local store.
+  the partner's secret manager or protected local store. The reference client protects its private key with a passphrase and stores credentials in an encrypted local vault; do not commit the vault or its passphrase.
 - Use HTTPS with certificate validation. CORS is not relevant to backend-to-
   backend calls.
 - A successful authentication response does not guarantee live data mapping

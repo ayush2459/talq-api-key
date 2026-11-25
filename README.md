@@ -7,7 +7,7 @@ This is a development pilot, not a claim of full TALQ 2.7.1 conformance or certi
 
 The application is exposed as two separate Uvicorn listeners:
 
-- **Internal control plane:** `app.main:app`, bound only to `127.0.0.1:8001`. It contains administrator routes and Swagger UI. Never expose this listener to partner machines.
+- **Internal control plane:** `app.admin_app:admin_app`, protected by a loopback-client guard and bound to `127.0.0.1:8001`. It contains administrator routes and Swagger UI. Never expose this listener to partner machines.
 - **Partner API:** `app.partner_app:partner_app`, bound to the gateway's private LAN IP on port 8000. It has no Swagger, ReDoc or OpenAPI and applies an explicit HTTP-method/path allowlist before forwarding requests.
 
 Partner machines can access only onboarding, OAuth, partner-owned key management and authorized data routes. Admin routes, legacy onboarding, docs, database and AWS credentials are not exposed through the partner listener.

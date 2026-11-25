@@ -256,6 +256,8 @@ def approve_access_request(request_id: int, db: Session = Depends(get_db)) -> di
     item.status = "approved"
     if enrollment is not None:
         enrollment.status = "approved"
+        from app.onboarding import audit_enrollment
+        audit_enrollment(db, item.id, "request_approved", "admin")
         db.commit()
         return {
             "request_id": item.id,
@@ -306,6 +308,8 @@ def reject_access_request(request_id: int, db: Session = Depends(get_db)) -> dic
         if enrollment is not None:
             enrollment.status = "rejected"
             enrollment.encrypted_credentials = None
+            from app.onboarding import audit_enrollment
+            audit_enrollment(db, item.id, "request_rejected", "admin")
     db.commit()
     return {"request_id": item.id, "status": "rejected"}
 

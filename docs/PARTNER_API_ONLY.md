@@ -9,7 +9,7 @@ Run two separate Uvicorn processes on the FlowSense gateway host:
 
 **Internal control plane (administrator only):**
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+.\.venv\Scripts\python.exe -m uvicorn app.admin_app:admin_app --host 127.0.0.1 --port 8001
 ```
 
 **Partner API (restricted private LAN):**

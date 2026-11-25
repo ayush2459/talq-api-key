@@ -34,6 +34,9 @@ jobs:
       - name: Compile application and test modules
         run: python -m compileall -q app tests scripts
 
+      - name: Validate dependency consistency
+        run: python -m pip check
+
       - name: Run test suite
         env:
           ADMIN_API_KEY: ci-test-admin-key

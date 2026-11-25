@@ -75,8 +75,11 @@ class ClientAPIKey(Base):
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="FlowSense TALQ Gateway",
+    title="FlowSense TALQ Gateway Internal Application",
     version="0.2.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
     description=(
         "Pilot gateway with approval-based API key issuance. This is not a complete "
         "or TALQ-certified implementation."

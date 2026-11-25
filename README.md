@@ -101,3 +101,14 @@ The gateway does not expose database credentials or RDS connectivity to partners
 CI verifies unit tests and code compilation only. It cannot reach a private LAN or the live FlowSense RDS instance. Complete live tests for firewall isolation, TLS, facility grants, two-partner data isolation, credential claim, rotation and revocation before production. The gateway is not TALQ-certified; validate required models and operations against the target CMS and specification.
 
 Never commit `.env`, partner private keys, onboarding tokens, OAuth credentials, bearer tokens or raw API keys.
+
+
+## Cross-platform partner testing
+
+For Windows, macOS and Linux partner machines, use
+[`scripts/partner_test_client.py`](scripts/partner_test_client.py) to verify
+the encrypted local API-key vault, retrieve only the isolated synthetic
+`/v1/test-data` fixtures, or deliberately rotate and retire a partner API key.
+See [`PARTNER_TEST_CLIENT.md`](PARTNER_TEST_CLIENT.md) for prerequisites and
+commands. The client requires a trusted FlowSense certificate for HTTPS and
+does not store credentials in the repository.

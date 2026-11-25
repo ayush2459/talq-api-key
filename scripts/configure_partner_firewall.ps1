@@ -4,7 +4,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if (-not [System.Net.IPAddress]::TryParse($PartnerIPv4, [ref]$null)) {
+try {
+    $parsedAddress = [System.Net.IPAddress]::Parse($PartnerIPv4)
+    if ($parsedAddress.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
+        throw 'PartnerIPv4 must be an IPv4 address.'
+    }
+}
+catch {
     throw 'PartnerIPv4 must be a valid IPv4 address.'
 }
 

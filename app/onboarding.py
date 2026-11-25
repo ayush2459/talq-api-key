@@ -45,6 +45,27 @@ class PartnerEnrollment(gateway.Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class PartnerEnrollmentAudit(gateway.Base):
+    __tablename__ = "partner_enrollment_audit"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    access_request_id: Mapped[int] = mapped_column(ForeignKey("access_requests.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    actor: Mapped[str] = mapped_column(String(32))
+    details: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+def audit_enrollment(db: Session, request_id: int, event_type: str, actor: str, details=None):
+    # Store metadata only. Never include passwords, client secrets, API keys or tokens.
+    db.add(PartnerEnrollmentAudit(
+        access_request_id=request_id,
+        event_type=event_type,
+        actor=actor,
+        details=json.dumps(details or {}, separators=(",", ":")),
+    ))
+
+
 gateway.Base.metadata.create_all(bind=gateway.engine)
 
 
@@ -115,6 +136,34 @@ def _authorized_enrollment(
     return enrollment, access_request
 
 
+
+@router.get(
+    "/admin/onboarding/{request_id}/audit",
+    tags=["Admin"],
+    dependencies=[Depends(gateway.require_admin_key)],
+)
+def list_onboarding_audit(
+    request_id: int,
+    db: Session = Depends(gateway.get_db),
+):
+    rows = db.scalars(
+        select(PartnerEnrollmentAudit)
+        .where(PartnerEnrollmentAudit.access_request_id == request_id)
+        .order_by(PartnerEnrollmentAudit.id.asc())
+    ).all()
+    return {
+        "request_id": request_id,
+        "events": [
+            {
+                "event_type": row.event_type,
+                "actor": row.actor,
+                "details": json.loads(row.details or "{}"),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ],
+    }
+
 @router.get("/v1/ping")
 def partner_ping():
     return {"status": "ok", "service": "FlowSense Partner API", "api_version": "v1"}
@@ -163,6 +212,7 @@ def create_partner_request(
         onboarding_expires_at=_now() + timedelta(hours=ONBOARDING_TOKEN_TTL_HOURS),
     )
     db.add(enrollment)
+    audit_enrollment(db, request_record.id, "request_submitted", "partner")
     db.commit()
     return {
         "request_id": request_record.id,
@@ -216,6 +266,7 @@ def claim_partner_credentials(
     envelope = json.loads(enrollment.encrypted_credentials)
     enrollment.claimed_at = _now()
     enrollment.encrypted_credentials = None
+    audit_enrollment(db, request_id, "credentials_claimed", "partner")
     db.commit()
     return {
         "request_id": request_id,

@@ -22,7 +22,7 @@ if (-not $env:ADMIN_API_KEY -or $env:ADMIN_API_KEY -eq 'replace-with-a-long-rand
 
 # Start the complete control plane only on loopback. Its Swagger UI is local.
 $python = (Resolve-Path '.\.venv\Scripts\python.exe').Path
-$adminArgs = '-m uvicorn app.main:app --host 127.0.0.1 --port 8001'
+$adminArgs = '-m uvicorn app.admin_app:admin_app --host 127.0.0.1 --port 8001'
 Start-Process -FilePath $python -ArgumentList $adminArgs -WorkingDirectory (Get-Location).Path
 Write-Host 'Admin control plane: http://127.0.0.1:8001/docs' -ForegroundColor Yellow
 

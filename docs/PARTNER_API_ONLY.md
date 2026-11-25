@@ -65,8 +65,11 @@ py scripts/partner_onboarding_client.py --claim
 The server encrypts a random AES-256-GCM key with the submitted RSA public
 key using RSA-OAEP-SHA256. The package is decryptable only by the matching
 partner private key. Claim is one-time and expires 30 minutes after provisioning.
-The onboarding status token expires after 72 hours. Keep the private key,
-status token and decrypted OAuth credential file private and never commit them.
+The onboarding status token expires after 72 hours. The reference client protects the RSA private key with a local passphrase and stores decrypted OAuth credentials in an AES-GCM/Scrypt encrypted local vault. Keep the private key, status token, vault passphrase and encrypted vault private; never commit them. The vault can be loaded using the `load_credentials(passphrase)` helper and should be transferred into the partner's secret manager for production.
+
+FlowSense records metadata-only onboarding audit events. An administrator can inspect them using `GET /admin/onboarding/{request_id}/audit` on the loopback-only control plane. No secrets or tokens are written to audit details.
+
+On Windows, an administrator can run `scripts/configure_partner_firewall.ps1 -PartnerIPv4 <approved-partner-ip>` from an elevated PowerShell session. Review existing broad firewall allow rules as well; allow rules are additive.
 
 ## Partner routes
 

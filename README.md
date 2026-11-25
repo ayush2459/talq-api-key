@@ -1,180 +1,103 @@
 # FlowSense TALQ Gateway
 
-**A FastAPI-based pilot gateway with approval-based client API key issuance.**
+Backend-only, LAN-deployable integration gateway for approved FlowSense partners.
+This is a development pilot, not a claim of full TALQ 2.7.1 conformance or certification.
 
-FlowSense TALQ Gateway explores a secure access workflow for connecting authorized client systems to a future FlowSense/TALQ integration. A client submits an access request; an administrator reviews and approves it; the service then generates a unique API key bound to that client's approved address. Each issued key can be revoked independently.
+## Security boundary
 
-> **Status:** Pilot scaffold, not a complete or TALQ-certified implementation. Device and data-package collections are placeholders. Live FlowSense integration, complete TALQ schema validation, and production security controls remain future work.
+The application is exposed as two separate Uvicorn listeners:
 
-## Access lifecycle
+- **Internal control plane:** `app.main:app`, bound only to `127.0.0.1:8001`. It contains administrator routes and Swagger UI. Never expose this listener to partner machines.
+- **Partner API:** `app.partner_app:partner_app`, bound to the gateway's private LAN IP on port 8000. It has no Swagger, ReDoc or OpenAPI and applies an explicit HTTP-method/path allowlist before forwarding requests.
 
-1. **Request access:** Client submits contact name, work email, organization, intended use, and client address to `POST /access-requests`.
-2. **Review request:** An administrator lists pending requests through `GET /admin/access-requests`.
-3. **Approve:** An administrator calls `POST /admin/access-requests/{request_id}/approve` using the `X-Admin-Key` header. The service creates a unique client API key and returns the raw key **once**.
-4. **Use API:** Client sends its issued key using `X-API-Key`, plus `talq-api-version: 2.7.1` and its approved `clientAddress` on gateway requests.
-5. **Revoke:** An administrator can revoke a key using `POST /admin/api-keys/{key_id}/revoke`. Revoked keys are rejected immediately.
+Partner machines can access only onboarding, OAuth, partner-owned key management and authorized data routes. Admin routes, legacy onboarding, docs, database and AWS credentials are not exposed through the partner listener.
 
-Only a SHA-256 hash of each issued API key is stored in the database. The raw key is not retrievable later, so the client must save it securely when issued. The admin credential is separate from client API keys and must never be shared with clients.
+## Windows LAN setup
 
-## API endpoints
-
-### Public
-- `GET /health` — health probe.
-- `POST /access-requests` — submit an access request; this does not issue a key.
-
-### Admin-only (requires `X-Admin-Key`)
-- `GET /admin/access-requests?status=pending` — list requests. Supported statuses: `pending`, `approved`, `rejected`, `all`.
-- `POST /admin/access-requests/{request_id}/approve` — approve and issue one client API key.
-- `POST /admin/access-requests/{request_id}/reject` — reject a pending request.
-- `GET /admin/api-keys` — list key metadata, never raw keys.
-- `POST /admin/api-keys/{key_id}/revoke` — revoke an issued key.
-
-### Client authentication
-- `GET /auth/verify` — verify an issued client API key and return safe organization/client metadata. Requires `X-API-Key`.
-
-See [CLIENT_INTEGRATION.md](CLIENT_INTEGRATION.md) for the partner-backend request examples and Python client sample.
-
-## Backend-only OAuth partner integration (LAN development)
-
-The `feature/lan-third-party-integration` branch adds OAuth 2.0 Client
-Credentials, one-time partner credential provisioning, partner-owned API-key
-generation/listing/rotation/revocation, expiry checks, and scope enforcement.
-No partner webpage is required.
-
-See [docs/LAN_PARTNER_AUTH.md](docs/LAN_PARTNER_AUTH.md) for LAN setup and
-the independent Python smoke test in `scripts/lan_partner_smoke_test.py`.
-The branch now includes facility-scoped RDS queries for devices, meter/sensor
-measurements, alerts, events, and data packages. Live AWS connectivity and
-partner-LAN interoperability still require deployment-side verification.
-
-### Protected gateway pilot routes (requires `X-API-Key`)
-- `GET /integration-status`
-- `GET /devices`
-- `GET /devices/count`
-- `GET /devices/{deviceAddress}`
-- `GET /services`
-- `GET /services/{serviceName}`
-- `GET /measurements` — bounded, paginated energy/water meter and sensor readings (requires `energy:read` and/or `water:read`).
-- `GET /alerts` — facility-scoped FlowSense alerts (requires `alerts:read`).
-- `GET /events` — alert lifecycle records exposed as gateway events (requires `alerts:read`).
-- `GET /data-packages` — packages assembled from the partner's authorized measurement and alert scopes.
-
-Gateway routes also require the `talq-api-version: 2.7.1` header and `clientAddress` query parameter. The requested client address must match the one associated with the issued key. These are pilot routes and response payloads, not proof of complete TALQ 2.7.1 conformance.
-
-## Local setup (Windows PowerShell)
-
-Prerequisites: Python 3.11 and Git.
+Prerequisites: Python 3.11, private gateway LAN IP, and a protected gateway database.
 
 ```powershell
-git clone https://github.com/ayush2459/talq-api-key.git
-cd talq-api-key
 py -3.11 -m venv .venv
-.\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Generate a strong admin secret:
+Set a unique `ADMIN_API_KEY` and a persistent `DATABASE_URL` in the server-only `.env`. Configure `FLOW_SENSE_DATABASE_URL`, `AWS_REGION`, and the server's AWS IAM identity only on the FlowSense host. Never provide these values to partners.
+
+Start the internal control plane in an administrator-only PowerShell window:
 
 ```powershell
-py -c "import secrets; print(secrets.token_urlsafe(48))"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 ```
 
-Put the generated value into `ADMIN_API_KEY` in `.env`. Do not use a client API key as the admin key, and never commit `.env`.
-
-The local example uses SQLite:
-
-```dotenv
-ADMIN_API_KEY=replace-with-your-generated-admin-secret
-DATABASE_URL=sqlite:///./flowsense_talq.db
-TALQ_CLIENT_ADDRESS=
-DEMO_MODE=true
-```
-
-Start the service:
-
-```powershell
-.\\RUN_WINDOWS.ps1
-```
-
-Open [Swagger UI](http://127.0.0.1:8000/docs) or the [health endpoint](http://127.0.0.1:8000/health).
-
-### Run tests
-
-```powershell
-.\\.venv\\Scripts\\python.exe -m pip install pytest httpx
-.\\.venv\\Scripts\\python.exe -m pytest -q
-```
-
-## LAN server deployment
-
-This project is intended to run on the FlowSense private LAN server. Do not
-deploy the gateway to a public hosting platform. Configure the server's private
-IPv4 address and restrict inbound TCP port 8000 to approved partner systems
-using the host firewall or VPN.
-
-Set the required server-side environment values in the untracked `.env` file:
-`ADMIN_API_KEY`, `DATABASE_URL`, `FLOW_SENSE_DATABASE_URL`, `AWS_REGION`,
-and the appropriate AWS IAM profile/role configuration. Never copy the RDS
-connection string, AWS credentials, or admin secret to partner machines.
-
-Start the service bound to the server's private LAN address (replace the
-example with the actual address assigned to the gateway host):
+Start the partner listener in another window (replace the example IP):
 
 ```powershell
 $env:FLOWSENSE_LAN_HOST = "192.168.1.10"
-.\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host $env:FLOWSENSE_LAN_HOST --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.partner_app:partner_app --host $env:FLOWSENSE_LAN_HOST --port 8000
 ```
 
-Do not use `0.0.0.0` for a LAN-only deployment because it listens on every
-available interface. Confirm the firewall allows only the intended partner
-subnet and does not expose port 8000 to the public internet.
+Admin Swagger is available only on the gateway host at `http://127.0.0.1:8001/docs`. Partner base URL is the LAN listener, ideally behind a private-CA TLS reverse proxy. Restrict inbound TCP 8000 to approved partner IPs; do not permit partner access to port 8001, database ports or RDS. Binding to a private IP is not a substitute for firewall rules.
 
-## Example access workflow
+## Partner API onboarding
 
-Submit a request in Swagger UI using `POST /access-requests`:
+The partner runs `scripts/partner_onboarding_client.py` from its own backend environment. It generates an RSA key pair locally and submits only the public key. The private key remains on the partner machine.
 
-```json
-{
-  "contact_name": "Example Contact",
-  "email": "integration@example.com",
-  "organization": "Example Organization",
-  "purpose": "Integrate our CMS with FlowSense gateway data for a pilot.",
-  "client_address": "cms-example-01"
-}
+Partner API:
+- `POST /v1/onboarding/requests`
+- `GET /v1/onboarding/requests/{request_id}`
+- `POST /v1/onboarding/requests/{request_id}/claim`
+- `POST /oauth/token`
+- `GET /integrations/me`
+- `POST /integrations/me/api-keys`
+- `GET /integrations/me/api-keys`
+- `POST /integrations/me/api-keys/{key_id}/rotate`
+- `POST /integrations/me/api-keys/{key_id}/retire`
+- `GET /auth/verify`
+- `GET /devices`, `/measurements`, `/alerts`, `/events`, `/data-packages`
+
+All other paths return 404 on the partner listener, including `/admin/*`, `/access-requests`, `/docs`, `/redoc`, and `/openapi.json`.
+
+### Partner-side environment
+
+```powershell
+$env:FLOWSENSE_BASE_URL = "https://192.168.1.10:8000"
+$env:PARTNER_CONTACT_NAME = "Partner Contact"
+$env:PARTNER_EMAIL = "partner@example.com"
+$env:PARTNER_ORGANIZATION = "Example Partner"
+$env:PARTNER_PURPOSE = "Read approved FlowSense device and energy data."
+$env:PARTNER_CLIENT_ADDRESS = "example-partner-01"
+py scripts/partner_onboarding_client.py
 ```
 
-An administrator then lists pending requests and approves the returned request ID. The approval response contains the new key once. Use that key in the `X-API-Key` header for protected endpoints and include `clientAddress=cms-example-01`.
+The partner receives a request ID and a random onboarding status token. It stores the token locally and polls for approval. FlowSense admins review requests through the loopback-only control plane, approve them, provision OAuth scopes and assign facility grants. Provisioning encrypts the client credentials for the partner's submitted RSA public key; the admin response does not reveal the client secret. The partner claims the encrypted package once:
 
-## Security notes and production work
+```powershell
+py scripts/partner_onboarding_client.py --claim
+```
 
-- Keep `ADMIN_API_KEY` restricted to trusted administrators.
-- The raw client API key is returned once; only its hash is persisted.
-- Revoke a key if it is exposed or no longer needed.
-- The public request endpoint should be protected with rate limiting, abuse monitoring, and optionally CAPTCHA/email verification before broad public release.
-- Use HTTPS, rotate credentials, review logs, and implement suitable client authentication and access controls.
-- Validate all relevant request/response schemas and security requirements against the official TALQ specification and the intended CMS.
-- The current admin key is a shared administrative secret, not a full user-management or identity-provider system.
+The credential envelope uses RSA-OAEP-SHA256 to wrap an AES-256-GCM key. Claims expire 30 minutes after provisioning, and onboarding status tokens expire after 72 hours. The partner's private key and onboarding token must remain private.
 
-## Current limitations
+## Data authorization
 
-- This gateway reads existing FlowSense RDS records; it does not ingest MQTT telemetry or replace the FlowSense sensor-ingestion pipeline.
-- Live RDS-backed device, measurement, alert, event, and data-package routes are implemented on the development branch; actual RDS connectivity and returned payloads still require environment-level verification.
-- Only a limited set of gateway-style routes is present.
-- No complete TALQ schema validation or external CMS interoperability test has been demonstrated.
-- The service is not TALQ-certified.
+OAuth client credentials issue short-lived bearer tokens. Partners create and manage their own TALQ API keys. API keys are scoped to approved data categories and exact TALQ `clientAddress`. RDS retrieval is filtered by active facility grants and uses the server-side read-only IAM-authenticated database connection.
 
-## Roadmap
+Available data routes:
+- `GET /devices`, `/devices/count`, `/devices/{deviceAddress}`
+- `GET /measurements` (energy/water scopes, bounded date windows and pagination)
+- `GET /alerts` and `/events`
+- `GET /data-packages`
 
-- [x] Basic FastAPI gateway scaffold and protected routes.
-- [x] Access request, administrator approval, per-client key issuance, and revocation workflow.
-- [x] Store issued API keys as hashes.
-- [ ] Add rate limiting, email verification, audit events, and richer admin identity management.
-- [ ] Map real FlowSense meter and sensor data into applicable TALQ models.
-- [ ] Validate the required operations and payloads against the official specification.
-- [ ] Run integration tests with the target CMS and review production security.
+The gateway does not expose database credentials or RDS connectivity to partners. `/events` currently represents alert lifecycle records; it does not imply a separate events table. Verify all returned records against live RDS data before production use.
 
-## References
+## Tests and limitations
 
-- Repository: https://github.com/ayush2459/talq-api-key
-- TALQ Consortium specification: https://github.com/TALQ-consortium/TALQ_specification
-- FastAPI: https://fastapi.tiangolo.com/
+```powershell
+.\.venv\Scripts\python.exe -m pip install pytest httpx
+.\.venv\Scripts\python.exe -m compileall -q app tests scripts
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+CI verifies unit tests and code compilation only. It cannot reach a private LAN or the live FlowSense RDS instance. Complete live tests for firewall isolation, TLS, facility grants, two-partner data isolation, credential claim, rotation and revocation before production. The gateway is not TALQ-certified; validate required models and operations against the target CMS and specification.
+
+Never commit `.env`, partner private keys, onboarding tokens, OAuth credentials, bearer tokens or raw API keys.

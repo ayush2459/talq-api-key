@@ -411,7 +411,7 @@ def provision_integration(
     # API-originated partner enrollments have a submitted public key. In that
     # case the client secret is never returned to the administrator or logged:
     # it is sealed to the partner's public key and claimed exactly once.
-    from app.onboarding import PartnerEnrollment, encrypt_credentials
+    from app.onboarding import PartnerEnrollment, audit_enrollment, encrypt_credentials
     enrollment = db.scalar(select(PartnerEnrollment).where(
         PartnerEnrollment.access_request_id == request_record.id
     ))
@@ -428,6 +428,10 @@ def provision_integration(
         )
         enrollment.status = "credentials_ready"
         enrollment.claim_expires_at = _now() + timedelta(minutes=30)
+        audit_enrollment(
+            db, request_record.id, "credentials_provisioned", "admin",
+            {"integration_id": client.id, "scopes": sorted(requested_scopes | {"keys:manage"})},
+        )
         db.commit()
         db.refresh(client)
         return {

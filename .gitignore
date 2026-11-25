@@ -9,3 +9,6 @@ __pycache__/
 .partner-key.json
 
 flowsense_talq.db
+partner_private_key.pem
+partner_onboarding.json
+partner_oauth_credentials.json

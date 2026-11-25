@@ -27,7 +27,7 @@ Set a unique `ADMIN_API_KEY` and a persistent `DATABASE_URL` in the server-only 
 Start the internal control plane in an administrator-only PowerShell window:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+.\.venv\Scripts\python.exe -m uvicorn app.admin_app:admin_app --host 127.0.0.1 --port 8001
 ```
 
 Start the partner listener in another window (replace the example IP):

@@ -19,6 +19,7 @@ _ALLOWED = [
     ("GET", re.compile(r"^/integrations/me$")),
     ("GET|POST", re.compile(r"^/integrations/me/api-keys$")),
     ("POST", re.compile(r"^/integrations/me/api-keys/\d+/(rotate|retire|revoke)$")),
+    ("GET", re.compile(r"^/v1/test-data$")),
     ("GET", re.compile(r"^/auth/verify$")),
     ("GET", re.compile(r"^/devices(?:/count|/[^/]+)?$")),
     ("GET", re.compile(r"^/(measurements|alerts|events|data-packages|services)(?:/[^/]+)?$")),

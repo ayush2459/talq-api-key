@@ -128,7 +128,7 @@ TALQ 2.7.1 documents once:
 
 ```bash
 python -m pip install -r requirements.txt
-python scripts/fetch_talq_specs.py
+python talq_validator/fetch_talq_specs.py
 ```
 
 Copy `partner-agent.example.json` to `partner-agent.json`, configure only

@@ -84,3 +84,24 @@ The specification snapshots are from the TALQ Consortium's public
 
 The official certification test tool and certification process are separate
 from this local OpenAPI validator and may require TALQ Consortium membership.
+
+
+## Automated partner onboarding
+
+Run the onboarding client on the partner computer. The RSA private key is generated and encrypted locally; only the public key is submitted.
+
+```bash
+python partner_runtime/onboarding.py submit --contact "Partner Contact" --email partner@example.com --organization "Partner Org" --purpose "Read approved gateway data for integration testing" --client-address "partner-lan-host"
+python partner_runtime/onboarding.py status
+python partner_runtime/onboarding.py claim
+```
+
+The FlowSense administrator must review and approve the request and provision the integration. This approval gate is intentionally not automated. After provisioning, the partner checks status and claims the one-time encrypted credentials. The claim command decrypts them locally and saves `partner_oauth_credentials.enc`; it never prints the client secret. Then create the first API key using the existing partner client:
+
+```bash
+python scripts/partner_test_client.py --oauth-vault partner_oauth_credentials.enc --api-vault partner_api_key.enc rotate
+```
+
+For initial key creation, use the partner API's `POST /integrations/me/api-keys` with an OAuth bearer token and store the returned key in the encrypted API-key vault. Do not paste credentials into chat, shell history, or source control.
+
+The runtime now requires both encrypted vaults. Configure `oauth_vault` and `api_key_vault` in `partner-agent.json`. It obtains OAuth access tokens automatically and rotates API keys before expiry. Set `rotate_before_days` to adjust the default seven-day rotation window. If rotation fails, it retains the previous local key and stops that polling cycle rather than retiring a credential it has not verified.

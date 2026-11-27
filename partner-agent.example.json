@@ -1,0 +1,16 @@
+{
+  "base_url": "https://192.168.1.10:8018",
+  "ca_cert": "./server.crt",
+  "api_key_vault": "./partner_api_key.enc",
+  "talq_version": "2.7.1",
+  "poll_interval_seconds": 300,
+  "timeout_seconds": 30,
+  "output_dir": "./partner-agent-data",
+  "jobs": [
+    {
+      "name": "devices",
+      "method": "GET",
+      "path": "/devices"
+    }
+  ]
+}

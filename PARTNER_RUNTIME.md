@@ -25,7 +25,7 @@ On macOS, use `python3` if needed.
 Download the official TALQ specification snapshots once while online:
 
 ```bash
-python scripts/fetch_talq_specs.py
+python talq_validator/fetch_talq_specs.py
 ```
 
 The script verifies each file against the pinned Git blob ID. Once downloaded,
@@ -34,7 +34,7 @@ validation is offline. The files are stored under
 
 ## Configure the agent
 
-Copy `partner-agent.example.json` to `partner-agent.json`, then set the
+Copy `partner-agent.example.json` to `partner-agent.json` (PowerShell: `Copy-Item partner-agent.example.json partner-agent.json`; macOS/Linux: `cp partner-agent.example.json partner-agent.json`), then set the
 partner's private Gateway URL, path to the public server certificate, encrypted
 API-key vault path and permitted GET jobs. Never add secrets to this JSON file.
 Only configure routes that the partner is authorized to call and that actually

@@ -19,7 +19,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
-import sys\nVALIDATOR_DIR = Path(__file__).resolve().parents[1] / "talq_validator"\nsys.path.insert(0, str(VALIDATOR_DIR))\nfrom validate_response import validate
+import sys
+VALIDATOR_DIR = Path(__file__).resolve().parents[1] / "talq_validator"
+sys.path.insert(0, str(VALIDATOR_DIR))
+from validate_response import validate
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = Path("partner-agent.json")
@@ -63,9 +66,11 @@ def run_job(job: dict, cfg: dict, api_key: str) -> bool:
         payload = None
     result.update({"job": job.get("name", path), "received_at": datetime.now(timezone.utc).isoformat()})
     report_path = reports_dir / f"{filename}.json"
-    report_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    report_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "
+", encoding="utf-8")
     if result.get("passed"):
-        (raw_dir / f"{filename}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        (raw_dir / f"{filename}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "
+", encoding="utf-8")
         print(f"[PASS] {method} {path} — TALQ OpenAPI response schema valid")
         return True
     (quarantine_dir / f"{filename}.json").write_bytes(raw)

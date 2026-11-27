@@ -21,3 +21,6 @@ partner_api_key.enc
 partner_oauth_credentials.enc
 partner_private_key*.pem
 partner_onboarding.json
+
+# Partner onboarding private key and local status token state
+partner_onboarding_private.pem

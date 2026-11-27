@@ -14,3 +14,13 @@ partner_private_key.pem
 partner_onboarding.json
 partner_oauth_credentials.json
 partner_oauth_credentials.enc
+# Local partner runtime state and credentials
+partner-agent.json
+partner-agent-data/
+partner_api_key.enc
+partner_oauth_credentials.enc
+partner_private_key*.pem
+partner_onboarding.json
+
+# Partner onboarding private key and local status token state
+partner_onboarding_private.pem

@@ -19,7 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
-from validate_response import validate
+import sys\nVALIDATOR_DIR = Path(__file__).resolve().parents[1] / "talq_validator"\nsys.path.insert(0, str(VALIDATOR_DIR))\nfrom validate_response import validate
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = Path("partner-agent.json")

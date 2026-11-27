@@ -112,3 +112,35 @@ the encrypted local API-key vault, retrieve only the isolated synthetic
 See [`PARTNER_TEST_CLIENT.md`](PARTNER_TEST_CLIENT.md) for prerequisites and
 commands. The client requires a trusted FlowSense certificate for HTTPS and
 does not store credentials in the repository.
+
+
+## Local partner runtime and TALQ response validation
+
+The partner-side runtime in `partner_runtime/agent.py` runs on the partner's
+own machine. It polls explicitly configured GET operations, validates each
+HTTP response against the pinned TALQ Gateway OpenAPI 2.7.1 response contract,
+stores valid responses locally, and quarantines invalid responses with a
+validation report. It supports one-shot and scheduled polling; it does not
+silently turn custom FlowSense endpoints into TALQ operations.
+
+Install the validation dependencies, then fetch the official, hash-pinned
+TALQ 2.7.1 documents once:
+
+```bash
+python -m pip install -r requirements.txt
+python scripts/fetch_talq_specs.py
+```
+
+Copy `partner-agent.example.json` to `partner-agent.json`, configure only
+partner-authorized TALQ Gateway GET paths, and run:
+
+```bash
+python partner_runtime/agent.py --once
+python partner_runtime/agent.py
+```
+
+See [PARTNER_RUNTIME.md](PARTNER_RUNTIME.md) for setup, output locations and
+manual response validation. A local OpenAPI schema PASS is not a TALQ
+Certification Tool result, semantic interoperability test or official
+certification. The official TALQ Certification Tool is governed by the
+Consortium's membership/certification process.

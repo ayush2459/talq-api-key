@@ -66,11 +66,9 @@ def run_job(job: dict, cfg: dict, api_key: str) -> bool:
         payload = None
     result.update({"job": job.get("name", path), "received_at": datetime.now(timezone.utc).isoformat()})
     report_path = reports_dir / f"{filename}.json"
-    report_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "
-", encoding="utf-8")
+    report_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     if result.get("passed"):
-        (raw_dir / f"{filename}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "
-", encoding="utf-8")
+        (raw_dir / f"{filename}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"[PASS] {method} {path} — TALQ OpenAPI response schema valid")
         return True
     (quarantine_dir / f"{filename}.json").write_bytes(raw)

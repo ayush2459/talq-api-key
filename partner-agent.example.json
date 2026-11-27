@@ -12,5 +12,7 @@
       "method": "GET",
       "path": "/devices"
     }
-  ]
+  ],
+  "oauth_vault": "./partner_oauth_credentials.enc",
+  "rotate_before_days": 7
 }
